@@ -5,40 +5,63 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Format Smormat | Universal Converter</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+              serif: ['Playfair Display', 'serif'],
+            }
+          }
+        }
+      }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&display=swap" rel="stylesheet">
     <style>
       body {
         font-family: 'Inter', sans-serif;
+        background-color: #F9F9F7;
+        color: #111111;
+        overflow-y: auto;
       }
-      /* Custom scrollbar for dark mode aesthetics */
+      /* Minimal editorial scrollbar */
       ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
+        width: 6px;
+        height: 6px;
       }
       ::-webkit-scrollbar-track {
-        background: #18181b; 
+        background: transparent; 
       }
       ::-webkit-scrollbar-thumb {
-        background: #3f3f46; 
-        border-radius: 4px;
+        background: rgba(0, 0, 0, 0.1); 
+        border-radius: 10px;
+        transition: background-color 0.3s ease;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: #52525b; 
+        background: rgba(0, 0, 0, 0.3); 
+      }
+      
+      @keyframes text-gradient {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+      }
+      .animate-text-gradient {
+        background-size: 200% auto;
+        animation: text-gradient 4s linear infinite;
+        background-clip: text !important;
+        -webkit-background-clip: text !important;
+        -webkit-text-fill-color: transparent !important;
+      }
+      .animate-border-flow {
+        background-size: 200% auto;
+        animation: text-gradient 6s linear infinite;
       }
     </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-    "react/": "https://esm.sh/react@^19.2.4/",
-    "react": "https://esm.sh/react@^19.2.4",
-    "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
-    "turndown": "https://esm.sh/turndown@^7.2.2"
-  }
-}
-</script>
-</head>
-  <body class="bg-zinc-950 text-zinc-100 antialiased overflow-hidden">
-    <div id="root" class="h-screen w-screen flex flex-col"></div>
+  </head>
+  <body class="antialiased">
+    <div id="root" class="min-h-screen w-full flex flex-col"></div>
+    <script type="module" src="/index.tsx"></script>
   </body>
 </html>

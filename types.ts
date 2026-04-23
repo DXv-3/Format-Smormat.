@@ -1,5 +1,6 @@
 export enum ConversionStatus {
   IDLE = 'IDLE',
+  AWAITING_ACTION = 'AWAITING_ACTION',
   READING = 'READING',
   PROCESSING = 'PROCESSING',
   COMPLETED = 'COMPLETED',
@@ -15,4 +16,9 @@ export interface ProcessedFile {
   status: ConversionStatus;
   errorMessage?: string;
   timestamp: number;
+  pdfUrl?: string; // Standard PDF URL
+  fillablePdfUrl?: string; // Auto-generated fillable PDF URL
+  images?: string[];
+  rawFile?: File;
+  performedAction?: string;
 }

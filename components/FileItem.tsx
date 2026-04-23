@@ -1,14 +1,27 @@
-import React, { useState } from 'react';
-import { Check, Download, FileText, ChevronDown, ChevronUp, Trash2, RefreshCw, ScanLine } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Check, Download, FileText, ChevronDown, ChevronUp, Trash2, FileType, Image as ImageIcon, Edit3 } from 'lucide-react';
 import { ProcessedFile, ConversionStatus } from '../types';
+import JSZip from 'jszip';
+import DotLoader from './DotLoader';
 
 interface FileItemProps {
   file: ProcessedFile;
   onRemove: (id: string) => void;
+  onProcess: (id: string, action: string) => void;
 }
 
-const FileItem: React.FC<FileItemProps> = ({ file, onRemove }) => {
+const FileItem: React.FC<FileItemProps> = ({ file, onRemove, onProcess }) => {
   const [expanded, setExpanded] = useState(false);
+
+  // Cleanup object URLs when the file is removed or component unmounted to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      // NOTE: We don't revoke here because the parent App manages the state and might
+      // re-render FileItem independently. However, a better pattern is to clean up
+      // in the parent when it actually removes the file from the array.
+      // E.g., `App.tsx -> removeFile()` should handle the URL revoke.
+    };
+  }, []);
 
   const handleDownload = () => {
     const blob = new Blob([file.content], { type: 'text/markdown;charset=utf-8' });
@@ -22,6 +35,57 @@ const FileItem: React.FC<FileItemProps> = ({ file, onRemove }) => {
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadPdf = () => {
+    if (!file.pdfUrl) return;
+    const a = document.createElement('a');
+    a.href = file.pdfUrl;
+    a.download = file.originalName.replace(/\.docx$/i, '.pdf');
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  const handleDownloadFillable = () => {
+    if (!file.fillablePdfUrl) return;
+    const a = document.createElement('a');
+    a.href = file.fillablePdfUrl;
+    a.download = `Fillable_${file.originalName.replace(/\.pdf$/i, '.pdf')}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  const handleDownloadPngs = async () => {
+    if (!file.images || file.images.length === 0) return;
+    
+    if (file.images.length === 1) {
+      const a = document.createElement('a');
+      a.href = file.images[0];
+      a.download = file.originalName.replace(/\.pdf$/i, '.png');
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } else {
+      const zip = new JSZip();
+      const baseName = file.originalName.replace(/\.pdf$/i, '');
+      
+      file.images.forEach((dataUrl, index) => {
+        const base64Data = dataUrl.split(',')[1];
+        zip.file(`${baseName}_page_${index + 1}.png`, base64Data, { base64: true });
+      });
+      
+      const content = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(content);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${baseName}_images.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+  };
+
   const formatSize = (bytes: number) => {
     if (bytes === 0) return '0 B';
     const k = 1024;
@@ -32,43 +96,48 @@ const FileItem: React.FC<FileItemProps> = ({ file, onRemove }) => {
 
   const renderStatusIcon = () => {
     switch (file.status) {
+      case ConversionStatus.AWAITING_ACTION:
+        return <FileText className="w-4 h-4 text-zinc-400" />;
       case ConversionStatus.PROCESSING:
-        return <RefreshCw className="w-5 h-5 animate-spin" />;
+        return <DotLoader />;
       case ConversionStatus.READING:
-        return <ScanLine className="w-5 h-5 animate-pulse" />;
+        return <DotLoader />;
       case ConversionStatus.ERROR:
-        // Although the icon color changes in the container, we just return the generic file icon or specific error icon here
-        return <FileText className="w-5 h-5" />; 
+        return <FileText className="w-4 h-4" />; 
       case ConversionStatus.COMPLETED:
-        return <FileText className="w-5 h-5" />;
+        return <Check className="w-4 h-4" />;
       default:
-        return <FileText className="w-5 h-5" />;
+        return <FileText className="w-4 h-4" />;
     }
   };
 
   const getStatusColor = () => {
     switch (file.status) {
+      case ConversionStatus.AWAITING_ACTION:
+        return 'text-zinc-500 bg-zinc-100';
       case ConversionStatus.COMPLETED:
-        return 'bg-emerald-500/10 text-emerald-500';
+        return 'text-emerald-600 bg-emerald-50';
       case ConversionStatus.ERROR:
-        return 'bg-red-500/10 text-red-500';
+        return 'text-red-600 bg-red-50';
       case ConversionStatus.PROCESSING:
-        return 'bg-blue-500/10 text-blue-500';
+        return 'text-blue-600 bg-blue-50';
       case ConversionStatus.READING:
-        return 'bg-purple-500/10 text-purple-400';
+        return 'text-purple-600 bg-purple-50';
       default:
-        return 'bg-zinc-800 text-zinc-400';
+        return 'text-zinc-500 bg-zinc-100';
     }
   };
 
   const getStatusText = () => {
     switch (file.status) {
+      case ConversionStatus.AWAITING_ACTION:
+        return 'Action Required';
       case ConversionStatus.READING:
-        return 'Reading & Naming...';
+        return 'Reading...';
       case ConversionStatus.PROCESSING:
         return 'Converting...';
       case ConversionStatus.COMPLETED:
-        return 'Markdown';
+        return 'Finished';
       case ConversionStatus.ERROR:
         return 'Error';
       default:
@@ -77,75 +146,219 @@ const FileItem: React.FC<FileItemProps> = ({ file, onRemove }) => {
   };
 
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden transition-all duration-300 hover:border-zinc-700 group">
-      <div className="p-4 flex items-center justify-between">
+    <div className="bg-white border border-zinc-200 overflow-hidden transition-all duration-300 hover:border-zinc-300 group shadow-sm">
+      <div className="p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         
         {/* Left: Icon & Info */}
         <div className="flex items-center space-x-4 flex-1 min-w-0">
           <div className={`
-            w-10 h-10 rounded-lg flex items-center justify-center shrink-0 transition-colors duration-300
+            w-8 h-8 flex items-center justify-center shrink-0 transition-colors duration-300 rounded-sm
             ${getStatusColor()}
           `}>
              {renderStatusIcon()}
           </div>
           
           <div className="flex flex-col min-w-0">
-            <h4 className="font-medium text-zinc-200 truncate pr-4" title={file.status === ConversionStatus.READING ? 'Scanning content...' : file.markdownName}>
-              {file.status === ConversionStatus.READING ? file.originalName : file.markdownName}
+            <h4 className="text-sm font-medium text-zinc-900 truncate pr-4" title={file.status === ConversionStatus.AWAITING_ACTION ? 'Awaiting Action...' : file.markdownName}>
+              {file.status === ConversionStatus.AWAITING_ACTION ? file.originalName : file.markdownName}
             </h4>
-            <div className="flex items-center space-x-2 text-xs text-zinc-500">
+            <div className="flex items-center space-x-2 text-[11px] text-zinc-500 mt-0.5 uppercase tracking-wider">
               <span>{formatSize(file.originalSize)}</span>
-              <span>&rarr;</span>
-              <span className={file.status === ConversionStatus.READING || file.status === ConversionStatus.PROCESSING ? "text-zinc-300" : "text-zinc-400"}>
+              <span>&mdash;</span>
+              <span className={file.status === ConversionStatus.READING || file.status === ConversionStatus.PROCESSING || file.status === ConversionStatus.AWAITING_ACTION ? "text-zinc-800 font-medium" : "text-zinc-500"}>
                 {getStatusText()}
               </span>
             </div>
           </div>
         </div>
 
-        {/* Right: Actions */}
-        <div className="flex items-center space-x-2 shrink-0">
-          {file.status === ConversionStatus.COMPLETED && (
-            <>
-              <button 
-                onClick={() => setExpanded(!expanded)}
-                className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-500 hover:text-zinc-300 transition-colors hidden sm:block"
-                title="Preview"
-              >
-                {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-              </button>
-              
-              <button 
-                onClick={handleDownload}
-                className="flex items-center space-x-2 bg-zinc-100 hover:bg-white text-zinc-900 px-4 py-2 rounded-lg font-medium text-sm transition-all shadow-lg shadow-zinc-900/20 active:scale-95"
-              >
-                <Download className="w-4 h-4" />
-                <span className="hidden sm:inline">Save</span>
-              </button>
-            </>
-          )}
+        {/* Status Layout - Triage Mode vs Completed Mode */}
+        {file.status === ConversionStatus.AWAITING_ACTION ? (
+          <div className="w-full mt-4 pt-4 border-t border-zinc-100">
+            <h5 className="text-[10px] font-semibold text-zinc-400 uppercase tracking-widest mb-3">Specialist Recommendations</h5>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {(() => {
+                const ext = file.originalName.split('.').pop()?.toLowerCase();
+                if (ext === 'pdf') {
+                  return (
+                    <>
+                      <button onClick={() => onProcess(file.id, 'pdf_fillable')} className="flex flex-col text-left p-3 rounded-md bg-[#F9F9F7] border border-teal-200/50 hover:border-teal-400 hover:shadow-[0_0_15px_rgba(45,212,191,0.15)] transition-all group/btn">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <Edit3 className="w-4 h-4 text-teal-600" />
+                          <span className="text-xs font-semibold text-zinc-900 uppercase tracking-wide">Form Specialist</span>
+                        </div>
+                        <p className="text-[10px] text-zinc-500 leading-relaxed">Auto-detects blank spaces and converts them into an interactive fillable PDF document.</p>
+                      </button>
+                      
+                      <button onClick={() => onProcess(file.id, 'extract_images')} className="flex flex-col text-left p-3 rounded-md bg-[#F9F9F7] border border-amber-200/50 hover:border-amber-400 hover:shadow-[0_0_15px_rgba(251,191,36,0.15)] transition-all group/btn">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <ImageIcon className="w-4 h-4 text-amber-500" />
+                          <span className="text-xs font-semibold text-zinc-900 uppercase tracking-wide">Visual Specialist</span>
+                        </div>
+                        <p className="text-[10px] text-zinc-500 leading-relaxed">Rips the document apart to extract graphical assets or page-by-page PNG renders.</p>
+                      </button>
 
-          <button 
-            onClick={() => onRemove(file.id)}
-            className="p-2 hover:bg-red-500/10 text-zinc-600 hover:text-red-500 rounded-lg transition-colors"
-            title="Remove"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
-        </div>
+                      <button onClick={() => onProcess(file.id, 'markdown_raw')} className="flex flex-col text-left p-3 rounded-md bg-[#F9F9F7] border border-pink-200/50 hover:border-pink-400 hover:shadow-[0_0_15px_rgba(236,72,153,0.15)] transition-all group/btn">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <FileText className="w-4 h-4 text-pink-500" />
+                          <span className="text-xs font-semibold text-zinc-900 uppercase tracking-wide">Content Specialist</span>
+                        </div>
+                        <p className="text-[10px] text-zinc-500 leading-relaxed">Extracts the core textual content into raw, universally usable Markdown structures.</p>
+                      </button>
+                    </>
+                  );
+                }
+                if (ext === 'html' || ext === 'htm') {
+                  return (
+                    <>
+                      <button onClick={() => onProcess(file.id, 'markdown_smart')} className="flex flex-col text-left p-3 rounded-md bg-[#F9F9F7] border border-pink-200/50 hover:border-pink-400 hover:shadow-[0_0_15px_rgba(236,72,153,0.15)] transition-all group/btn">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <FileText className="w-4 h-4 text-pink-500" />
+                          <span className="text-xs font-semibold text-zinc-900 uppercase tracking-wide">Article Specialist</span>
+                        </div>
+                        <p className="text-[10px] text-zinc-500 leading-relaxed">Strips out HTML boilerplate, nav, and footers, extracting only the clean article semantic content.</p>
+                      </button>
+                      <button onClick={() => onProcess(file.id, 'markdown_raw')} className="flex flex-col text-left p-3 rounded-md bg-[#F9F9F7] border border-zinc-200/50 hover:border-zinc-400 hover:shadow-[0_0_15px_rgba(161,161,170,0.15)] transition-all group/btn">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <FileText className="w-4 h-4 text-zinc-600" />
+                          <span className="text-xs font-semibold text-zinc-900 uppercase tracking-wide">Raw Extraction</span>
+                        </div>
+                        <p className="text-[10px] text-zinc-500 leading-relaxed">Dumps the raw HTML conversion without filtering or removing boilerplate logic.</p>
+                      </button>
+                    </>
+                  );
+                }
+                if (ext === 'docx') {
+                  return (
+                    <>
+                      <button onClick={() => onProcess(file.id, 'markdown_raw')} className="flex flex-col text-left p-3 rounded-md bg-[#F9F9F7] border border-pink-200/50 hover:border-pink-400 hover:shadow-[0_0_15px_rgba(236,72,153,0.15)] transition-all group/btn">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <FileText className="w-4 h-4 text-pink-500" />
+                          <span className="text-xs font-semibold text-zinc-900 uppercase tracking-wide">Content Specialist</span>
+                        </div>
+                        <p className="text-[10px] text-zinc-500 leading-relaxed">Extracts all text, lists, and tables into cleanly parsed structure Markdown.</p>
+                      </button>
+                      <button onClick={() => onProcess(file.id, 'docx_to_pdf')} className="flex flex-col text-left p-3 rounded-md bg-[#F9F9F7] border border-teal-200/50 hover:border-teal-400 hover:shadow-[0_0_15px_rgba(45,212,191,0.15)] transition-all group/btn">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <FileType className="w-4 h-4 text-teal-600" />
+                          <span className="text-xs font-semibold text-zinc-900 uppercase tracking-wide">Format Specialist</span>
+                        </div>
+                        <p className="text-[10px] text-zinc-500 leading-relaxed">Lossless locked formatting conversion directly from Word to PDF.</p>
+                      </button>
+                    </>
+                  );
+                }
+                return (
+                  <button onClick={() => onProcess(file.id, 'markdown_raw')} className="flex flex-col text-left p-3 rounded-md bg-[#F9F9F7] border border-zinc-200/50 hover:border-zinc-400 hover:shadow-[0_0_15px_rgba(161,161,170,0.15)] transition-all group/btn">
+                    <div className="flex items-center space-x-2 mb-1">
+                      <Check className="w-4 h-4 text-zinc-600" />
+                      <span className="text-xs font-semibold text-zinc-900 uppercase tracking-wide">Default Process</span>
+                    </div>
+                    <p className="text-[10px] text-zinc-500 leading-relaxed">Initiates the standard pipeline parsing.</p>
+                  </button>
+                );
+              })()}
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center space-x-3 shrink-0 flex-wrap gap-y-2 justify-end w-full md:w-auto mt-4 md:mt-0 pt-4 md:pt-0 border-t md:border-none border-zinc-100">
+            {file.status === ConversionStatus.COMPLETED && (
+              <>
+                {file.content && (
+                  <>
+                    <button 
+                      onClick={() => setExpanded(!expanded)}
+                      className="p-1.5 hover:bg-zinc-100 text-zinc-400 hover:text-zinc-900 transition-colors hidden sm:block"
+                      title="Preview MD"
+                    >
+                      {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    </button>
+                    
+                    <button 
+                      onClick={handleDownload}
+                      className="flex items-center space-x-1.5 bg-zinc-900 hover:bg-zinc-800 text-white px-3 py-1.5 font-medium text-xs transition-colors rounded-sm"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Download MD</span>
+                    </button>
+                  </>
+                )}
+                
+                {file.pdfUrl && (
+                  <button 
+                    onClick={handleDownloadPdf}
+                    className="flex items-center space-x-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 px-3 py-1.5 font-medium text-xs transition-colors border border-zinc-200 rounded-sm"
+                    title="Download as PDF"
+                  >
+                    <FileType className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">PDF</span>
+                  </button>
+                )}
+
+                {file.fillablePdfUrl && (
+                  <button 
+                    onClick={handleDownloadFillable}
+                    className="flex items-center space-x-1.5 bg-gradient-to-r from-teal-500 to-teal-400 hover:from-teal-600 hover:to-teal-500 text-white font-medium text-xs px-3 py-1.5 transition-all shadow-[0_0_10px_rgba(45,212,191,0.3)] rounded-sm"
+                    title="Download Interactive Fillable PDF"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Fillable</span>
+                  </button>
+                )}
+
+                {file.images && file.images.length > 0 && (
+                  <button 
+                    onClick={handleDownloadPngs}
+                    className="flex items-center space-x-1.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-white px-3 py-1.5 font-medium text-xs transition-all shadow-[0_0_10px_rgba(251,191,36,0.3)] rounded-sm"
+                    title="Download PNGs"
+                  >
+                    <ImageIcon className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">PNGs</span>
+                  </button>
+                )}
+              </>
+            )}
+
+            <button 
+              onClick={() => onRemove(file.id)}
+              className="p-1.5 hover:bg-red-50 text-zinc-400 hover:text-red-600 transition-colors ml-2 rounded-sm"
+              title="Remove"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Preview Section */}
       {expanded && file.status === ConversionStatus.COMPLETED && (
-        <div className="border-t border-zinc-800 bg-zinc-950/50 p-4">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Markdown Preview</span>
-            <span className="text-xs text-zinc-600">First 500 chars</span>
+        <div className="border-t border-zinc-200 bg-zinc-50 p-4 sm:p-6">
+          <div className="flex justify-between items-center mb-3">
+            <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Markdown Preview</span>
+            <span className="text-[10px] text-zinc-400">First 500 chars</span>
           </div>
-          <pre className="text-xs text-zinc-400 font-mono whitespace-pre-wrap break-all bg-zinc-950 p-3 rounded-lg border border-zinc-800/50 max-h-40 overflow-y-auto">
+          <pre className="text-xs leading-relaxed text-zinc-700 font-mono whitespace-pre-wrap break-all bg-white p-4 border border-zinc-200 max-h-48 overflow-y-auto mb-6 shadow-sm">
             {file.content.slice(0, 500)}
             {file.content.length > 500 && '...'}
           </pre>
+          
+          {file.images && file.images.length > 0 && (
+            <div>
+              <div className="flex justify-between items-center mb-3">
+                <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Extracted Images ({file.images.length})</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 max-h-64 overflow-y-auto p-4 bg-white border border-zinc-200 shadow-sm">
+                {file.images.map((img, idx) => (
+                  <div key={idx} className="relative aspect-[3/4] overflow-hidden border border-zinc-200 bg-zinc-50 group-hover:border-zinc-300 transition-colors">
+                    <img src={img} alt={`Page ${idx + 1}`} className="w-full h-full object-contain" />
+                    <div className="absolute bottom-0 left-0 right-0 bg-white/90 backdrop-blur-sm p-1.5 text-center border-t border-zinc-200">
+                      <span className="text-[9px] font-medium text-zinc-600 uppercase tracking-wider">Page {idx + 1}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
