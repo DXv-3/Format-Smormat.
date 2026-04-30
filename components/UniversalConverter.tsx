@@ -127,10 +127,8 @@ export const UniversalConverter: React.FC<UniversalConverterProps> = ({ onConver
   };
 
   const allFormats = Array.from(conversionGraph.formats.values());
-  const filteredIn = allFormats.filter(f => f.name.toLowerCase().includes(searchIn.toLowerCase()) || f.id.includes(searchIn.toLowerCase()));
-  const filteredOut = allFormats.filter(f => f.name.toLowerCase().includes(searchOut.toLowerCase()) || f.id.includes(searchOut.toLowerCase()));
+  const possibleOutFormats = inFormat ? allFormats.filter(f => f.id !== inFormat && f.name.toLowerCase().includes(searchOut.toLowerCase())) : [];
 
-  // Render search list dropdown helper inline purely for visual block space since we lack native custom select components here
   return (
     <div className={`relative mt-8 rounded-[18px] p-[2px] transition-all duration-500 group ${isDragActive ? 'scale-[1.01]' : 'hover:scale-[1.01]'}`}>
       
@@ -157,13 +155,20 @@ export const UniversalConverter: React.FC<UniversalConverterProps> = ({ onConver
         >
           <input type="file" id="uv-file" className="hidden" onChange={(e) => e.target.files && handleNewFile(e.target.files[0])} />
           {file ? (
-            <div className="flex items-center space-x-3 bg-white p-3 rounded-md shadow-sm border border-zinc-100 z-20">
-              <span className="font-semibold text-zinc-800 text-sm">{file.name}</span>
-              <span className="text-xs text-zinc-400">({(file.size / 1024).toFixed(1)} KB)</span>
-              <button 
-                onClick={(e) => { e.stopPropagation(); setFile(null); }} 
-                className="hover:text-red-500 transition-colors p-1 rounded-sm"
-              ><X className="w-4 h-4 text-zinc-400 hover:text-red-500" /></button>
+            <div className="flex flex-col items-center z-20">
+              <div className="flex items-center space-x-3 bg-white p-3 rounded-md shadow-sm border border-zinc-100">
+                <span className="font-semibold text-zinc-800 text-sm">{file.name}</span>
+                <span className="text-xs text-zinc-400">({(file.size / 1024).toFixed(1)} KB)</span>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); setFile(null); setInFormat(''); setOutFormat(''); }} 
+                  className="hover:text-red-500 transition-colors p-1 rounded-sm"
+                ><X className="w-4 h-4 text-zinc-400 hover:text-red-500" /></button>
+              </div>
+              {inFormat && (
+                <div className="mt-3 px-3 py-1 bg-indigo-50 text-indigo-700 text-xs rounded-full font-medium border border-indigo-100">
+                  Detected Input Format: {conversionGraph.formats.get(inFormat)?.name || inFormat}
+                </div>
+              )}
             </div>
           ) : (
             <div className="flex flex-col items-center py-6 px-4 z-0 pointer-events-none">
@@ -184,69 +189,55 @@ export const UniversalConverter: React.FC<UniversalConverterProps> = ({ onConver
           )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-4 items-center">
-        {/* IN FORMAT */}
-        <div className="flex flex-col">
-          <label className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider mb-2">Input Format</label>
-          <div className="relative">
-             <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-zinc-400" />
-             <input type="text" placeholder="Search..." value={searchIn} onChange={e => setSearchIn(e.target.value)} className="w-full text-xs pl-8 pr-3 py-2 border border-zinc-200 rounded-md bg-zinc-50 focus:bg-white mb-2 outline-none" />
+        {file && inFormat && (
+          <div className="flex flex-col mt-2">
+            <div className="flex justify-between items-end mb-4">
+               <label className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">Select Output Format Target</label>
+               <div className="relative w-48">
+                 <Search className="w-3.5 h-3.5 absolute left-3 top-2 text-zinc-400" />
+                 <input type="text" placeholder="Filter targets..." value={searchOut} onChange={e => setSearchOut(e.target.value)} className="w-full text-xs pl-8 pr-3 py-1.5 border border-zinc-200 rounded-full bg-zinc-50 focus:bg-white outline-none focus:border-indigo-300 transition-colors" />
+               </div>
+            </div>
+            
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-64 overflow-y-auto pr-2 pb-2">
+              {possibleOutFormats.map(f => (
+                <button
+                  key={f.id}
+                  onClick={() => setOutFormat(f.id)}
+                  className={`flex flex-col text-left p-3 rounded-lg border transition-all ${outFormat === f.id ? 'border-indigo-500 bg-indigo-50/50 shadow-sm ring-1 ring-indigo-500/20' : 'border-zinc-200 hover:border-indigo-300 hover:bg-zinc-50 bg-white'}`}
+                >
+                  <span className={`text-sm font-semibold mb-1 ${outFormat === f.id ? 'text-indigo-700' : 'text-zinc-800'}`}>{f.name}</span>
+                  <span className={`text-[10px] ${outFormat === f.id ? 'text-indigo-500' : 'text-zinc-400'}`}>Ext: {f.extensions.join(', ')}</span>
+                </button>
+              ))}
+              {possibleOutFormats.length === 0 && (
+                <div className="col-span-full py-8 text-center text-zinc-400 text-sm">No target formats match your filter.</div>
+              )}
+            </div>
           </div>
-          <select 
-            size={4}
-            value={inFormat} 
-            onChange={(e) => setInFormat(e.target.value)} 
-            className="w-full text-sm border border-zinc-200 rounded-md bg-white p-2 outline-none"
-          >
-            {filteredIn.map(f => (
-              <option key={f.id} value={f.id}>{f.name} ({f.extensions.join(', ')})</option>
-            ))}
-          </select>
-        </div>
+        )}
 
-        <div className="flex justify-center rotate-90 md:rotate-0 text-zinc-300">
-          <ArrowRight className="w-6 h-6" />
-        </div>
-
-        {/* OUT FORMAT */}
-        <div className="flex flex-col">
-          <label className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider mb-2">Output Format</label>
-          <div className="relative">
-             <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-zinc-400" />
-             <input type="text" placeholder="Search..." value={searchOut} onChange={e => setSearchOut(e.target.value)} className="w-full text-xs pl-8 pr-3 py-2 border border-zinc-200 rounded-md bg-zinc-50 focus:bg-white mb-2 outline-none" />
+        {file && inFormat && (
+          <div className="mt-8 flex items-center justify-between border-t border-zinc-100 pt-6">
+            <div className="flex-1 mr-4">
+              {progressMsg && <p className="text-xs font-mono text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-md inline-block">{progressMsg}</p>}
+              {errorMsg && <p className="text-xs font-mono text-red-600 bg-red-50 px-3 py-1.5 rounded-md inline-block flex items-center space-x-1.5"><AlertCircle className="w-3.5 h-3.5" /><span>{errorMsg}</span></p>}
+            </div>
+            
+            <button 
+              onClick={runConvert}
+              disabled={!outFormat || isProcessing}
+              className="bg-zinc-900 hover:bg-zinc-800 disabled:bg-zinc-200 disabled:text-zinc-400 disabled:cursor-not-allowed text-white font-medium text-sm px-6 py-2.5 rounded-lg transition-colors flex items-center space-x-2 shadow-sm"
+            >
+              {isProcessing ? (
+                 <span className="flex items-center space-x-2"><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span><span>Routing...</span></span>
+              ) : (
+                <span>{outFormat ? `Convert to ${conversionGraph.formats.get(outFormat)?.name}` : 'Select target format'}</span>
+              )}
+            </button>
           </div>
-          <select 
-             size={4}
-             value={outFormat} 
-             onChange={(e) => setOutFormat(e.target.value)} 
-             className="w-full text-sm border border-zinc-200 rounded-md bg-white p-2 outline-none"
-          >
-            {filteredOut.map(f => (
-              <option key={f.id} value={f.id}>{f.name} ({f.extensions.join(', ')})</option>
-            ))}
-          </select>
-        </div>
+        )}
       </div>
-
-      <div className="mt-8 flex items-center justify-between">
-        <div className="flex-1 mr-4">
-          {progressMsg && <p className="text-xs font-mono text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-md inline-block">{progressMsg}</p>}
-          {errorMsg && <p className="text-xs font-mono text-red-600 bg-red-50 px-3 py-1.5 rounded-md inline-block flex items-center space-x-1.5"><AlertCircle className="w-3.5 h-3.5" /><span>{errorMsg}</span></p>}
-        </div>
-        
-        <button 
-          onClick={runConvert}
-          disabled={!file || !inFormat || !outFormat || isProcessing}
-          className="bg-black hover:bg-zinc-800 disabled:bg-zinc-300 disabled:cursor-not-allowed text-white font-medium text-sm px-6 py-2.5 rounded-lg transition-colors flex items-center space-x-2"
-        >
-          {isProcessing ? (
-             <span className="flex items-center space-x-2"><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span><span>Routing...</span></span>
-          ) : (
-            <span>Convert Matrix</span>
-          )}
-        </button>
-      </div>
-     </div>
     </div>
   );
 };

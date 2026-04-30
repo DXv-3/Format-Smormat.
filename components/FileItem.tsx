@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Check, Download, FileText, ChevronDown, ChevronUp, Trash2, FileType, Image as ImageIcon, Edit3 } from 'lucide-react';
+import { Check, Download, FileText, ChevronDown, ChevronUp, Trash2, FileType, Image as ImageIcon, Edit3, Sparkles } from 'lucide-react';
 import { ProcessedFile, ConversionStatus } from '../types';
 import JSZip from 'jszip';
 import DotLoader from './DotLoader';
@@ -8,9 +8,11 @@ interface FileItemProps {
   file: ProcessedFile;
   onRemove: (id: string) => void;
   onProcess: (id: string, action: string) => void;
+  onAnalyze?: (id: string) => void;
+  onCinematic?: (id: string) => void;
 }
 
-const FileItem: React.FC<FileItemProps> = ({ file, onRemove, onProcess }) => {
+const FileItem: React.FC<FileItemProps> = React.memo(({ file, onRemove, onProcess, onAnalyze, onCinematic }) => {
   const [expanded, setExpanded] = useState(false);
 
   // Cleanup object URLs when the file is removed or component unmounted to prevent memory leaks
@@ -22,6 +24,12 @@ const FileItem: React.FC<FileItemProps> = ({ file, onRemove, onProcess }) => {
       // E.g., `App.tsx -> removeFile()` should handle the URL revoke.
     };
   }, []);
+
+  useEffect(() => {
+    if (file.aiStatus === 'ANALYZING' && !expanded) {
+      setExpanded(true);
+    }
+  }, [file.aiStatus, expanded]);
 
   const handleDownload = () => {
     const blob = new Blob([file.content], { type: 'text/markdown;charset=utf-8' });
@@ -264,12 +272,32 @@ const FileItem: React.FC<FileItemProps> = ({ file, onRemove, onProcess }) => {
           <div className="flex items-center space-x-3 shrink-0 flex-wrap gap-y-2 justify-end w-full md:w-auto mt-4 md:mt-0 pt-4 md:pt-0 border-t md:border-none border-zinc-100">
             {file.status === ConversionStatus.COMPLETED && (
               <>
+                <button
+                  onClick={() => onCinematic?.(file.id)}
+                  className="flex flex-col text-left p-1.5 hover:bg-zinc-100 text-indigo-500 hover:text-indigo-600 transition-colors hidden sm:block rounded-sm"
+                  title="Cinematic Sequence"
+                >
+                  <div className="flex items-center gap-1 font-semibold text-xs uppercase tracking-wider">
+                    <span>Cinematic View</span>
+                  </div>
+                </button>
+              
                 {file.content && (
                   <>
                     <button 
+                      onClick={() => onAnalyze?.(file.id)}
+                      disabled={file.aiStatus === 'ANALYZING' || file.aiStatus === 'COMPLETED'}
+                      className={`flex items-center space-x-1.5 px-3 py-1.5 font-medium text-xs transition-all shadow-sm rounded-sm text-white ${file.aiStatus === 'COMPLETED' ? 'bg-purple-400 cursor-default' : 'bg-gradient-to-r from-purple-500 to-fuchsia-400 hover:from-purple-600 hover:to-fuchsia-500 shadow-[0_0_10px_rgba(168,85,247,0.3)]'}`}
+                      title={file.aiStatus === 'COMPLETED' ? 'AI Analysis Complete' : 'Extract Insights with AI'}
+                    >
+                      <Sparkles className={`w-3.5 h-3.5 ${file.aiStatus === 'ANALYZING' ? 'animate-spin' : ''}`} />
+                      <span className="hidden sm:inline">{file.aiStatus === 'ANALYZING' ? 'Analyzing...' : file.aiStatus === 'COMPLETED' ? 'Insights Extracted' : 'Extract Insights'}</span>
+                    </button>
+
+                    <button 
                       onClick={() => setExpanded(!expanded)}
                       className="p-1.5 hover:bg-zinc-100 text-zinc-400 hover:text-zinc-900 transition-colors hidden sm:block"
-                      title="Preview MD"
+                      title="Preview"
                     >
                       {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                     </button>
@@ -333,6 +361,53 @@ const FileItem: React.FC<FileItemProps> = ({ file, onRemove, onProcess }) => {
       {/* Preview Section */}
       {expanded && file.status === ConversionStatus.COMPLETED && (
         <div className="border-t border-zinc-200 bg-zinc-50 p-4 sm:p-6">
+          {file.aiMetadata && (
+            <div className="mb-6 bg-white border border-fuchsia-100 rounded-lg shadow-sm overflow-hidden p-0">
+               <div className="bg-gradient-to-r from-fuchsia-50 to-purple-50 px-4 py-3 border-b border-fuchsia-100 flex items-center gap-2">
+                 <Sparkles className="w-4 h-4 text-purple-500" />
+                 <span className="text-xs font-semibold text-purple-900 uppercase tracking-widest">AI Insights</span>
+               </div>
+               <div className="p-4 sm:p-5">
+                 <div className="mb-4">
+                   <p className="text-sm text-zinc-700 leading-relaxed">{file.aiMetadata.summary}</p>
+                 </div>
+                 
+                 <div className="grid grid-cols-2 gap-4 mb-4">
+                   <div>
+                     <span className="block text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-1">Document Type</span>
+                     <span className="inline-block px-2 py-1 bg-zinc-100 text-zinc-800 text-xs font-medium rounded">{file.aiMetadata.documentType}</span>
+                   </div>
+                   <div>
+                     <span className="block text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-1">Sentiment / Tone</span>
+                     <span className="inline-block px-2 py-1 bg-zinc-100 text-zinc-800 text-xs font-medium rounded">{file.aiMetadata.sentiment}</span>
+                   </div>
+                 </div>
+
+                 {file.aiMetadata.keyEntities && file.aiMetadata.keyEntities.length > 0 && (
+                   <div className="mb-4">
+                     <span className="block text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-2">Key Entities</span>
+                     <div className="flex flex-wrap gap-2">
+                       {file.aiMetadata.keyEntities.map((entity: string, i: number) => (
+                         <span key={i} className="px-2 py-1 border border-zinc-200 text-zinc-600 text-[11px] rounded bg-zinc-50">{entity}</span>
+                       ))}
+                     </div>
+                   </div>
+                 )}
+
+                 {file.aiMetadata.tags && file.aiMetadata.tags.length > 0 && (
+                   <div>
+                     <span className="block text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-2">Tags</span>
+                     <div className="flex flex-wrap gap-2">
+                       {file.aiMetadata.tags.map((tag: string, i: number) => (
+                         <span key={i} className="px-2 py-0.5 bg-blue-50 text-blue-700 text-[10px] font-medium rounded-full border border-blue-100">#{tag}</span>
+                       ))}
+                     </div>
+                   </div>
+                 )}
+               </div>
+            </div>
+          )}
+
           <div className="flex justify-between items-center mb-3">
             <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Markdown Preview</span>
             <span className="text-[10px] text-zinc-400">First 500 chars</span>
@@ -363,6 +438,6 @@ const FileItem: React.FC<FileItemProps> = ({ file, onRemove, onProcess }) => {
       )}
     </div>
   );
-};
+});
 
 export default FileItem;

@@ -6,14 +6,18 @@ import { UniversalConverter } from './components/UniversalConverter';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
 import { ProcessedFile, ConversionStatus } from './types';
 import { processUniversalFile } from './services/converter';
+import { extractDocumentMetadata } from './services/ai';
 import { conversionGraph } from './lib/format-router/graph';
 import { bootstrapFormatRouter } from './lib/format-router/bootstrap';
+
+import { CinematicFormatSequence } from './components/CinematicFormatSequence';
 
 const App: React.FC = () => {
   const [files, setFiles] = useState<ProcessedFile[]>([]);
   const [copiedAll, setCopiedAll] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'specialists' | 'universal'>('specialists');
+  const [cinematicFileId, setCinematicFileId] = useState<string | null>(null);
 
   // Re-introducing scroll controls for the arc sequence
   const heroRef = useRef<HTMLDivElement>(null);
@@ -57,31 +61,53 @@ const App: React.FC = () => {
     setFiles(prev => [...newEntries, ...prev]);
   }, []);
 
-  const handleProcessFile = async (id: string, action: string) => {
-    const fileEntry = files.find(f => f.id === id);
-    if (!fileEntry || !fileEntry.rawFile) return;
+  const handleProcessFile = useCallback(async (id: string, action: string) => {
+    setFiles(current => {
+      const fileEntry = current.find(f => f.id === id);
+      if (!fileEntry || !fileEntry.rawFile) return current;
 
-    setFiles(current => current.map(f => f.id === id ? { ...f, status: ConversionStatus.PROCESSING, performedAction: action } : f));
-
-    try {
-      const result = await processUniversalFile(fileEntry.rawFile, action);
+      // Optimistic update
+      const loadingState = current.map(f => f.id === id ? { ...f, status: ConversionStatus.PROCESSING, performedAction: action } : f);
       
-      setFiles(current => current.map(f => f.id === id ? { 
-        ...f, 
-        status: ConversionStatus.COMPLETED,
-        content: result.markdown || '',
-        markdownName: result.smartName || f.originalName,
-        pdfUrl: result.pdfUrl,
-        images: result.images,
-        fillablePdfUrl: result.fillablePdfUrl
-      } : f));
-    } catch (err) {
-      console.error(err);
-      setFiles(current => current.map(f => f.id === id ? { ...f, status: ConversionStatus.ERROR, errorMessage: 'Processing failed' } : f));
-    }
-  };
+      // We must execute the async logic outside of the setFiles state updater
+      processUniversalFile(fileEntry.rawFile, action).then(result => {
+        setFiles(inner => inner.map(f => f.id === id ? { 
+          ...f, 
+          status: ConversionStatus.COMPLETED,
+          content: result.markdown || '',
+          markdownName: result.smartName || f.originalName,
+          pdfUrl: result.pdfUrl,
+          images: result.images,
+          fillablePdfUrl: result.fillablePdfUrl
+        } : f));
+      }).catch(err => {
+        console.error(err);
+        setFiles(inner => inner.map(f => f.id === id ? { ...f, status: ConversionStatus.ERROR, errorMessage: 'Processing failed' } : f));
+      });
+      
+      return loadingState;
+    });
+  }, []);
 
-  const removeFile = (id: string) => {
+  const handleAnalyzeFile = useCallback((id: string) => {
+    setFiles(current => {
+      const fileEntry = current.find(f => f.id === id);
+      if (!fileEntry || !fileEntry.content) return current;
+
+      const loadingState = current.map(f => f.id === id ? { ...f, aiStatus: 'ANALYZING' } : f);
+
+      extractDocumentMetadata(fileEntry.content, fileEntry.originalName).then(metadata => {
+        setFiles(inner => inner.map(f => f.id === id ? { ...f, aiStatus: 'COMPLETED', aiMetadata: metadata } : f));
+      }).catch(err => {
+        console.error(err);
+        setFiles(inner => inner.map(f => f.id === id ? { ...f, aiStatus: 'ERROR' } : f));
+      });
+
+      return loadingState;
+    });
+  }, []);
+
+  const removeFile = useCallback((id: string) => {
     setFiles(prev => {
       const fileToRemove = prev.find(f => f.id === id);
       if (fileToRemove) {
@@ -90,7 +116,7 @@ const App: React.FC = () => {
       }
       return prev.filter(f => f.id !== id);
     });
-  };
+  }, []);
 
   const clearAll = () => {
     if (confirm('Are you sure you want to clear all converted files?')) {
@@ -140,6 +166,23 @@ const App: React.FC = () => {
       console.error('Failed to copy text: ', err);
     }
   };
+
+  if (cinematicFileId) {
+    const file = files.find(f => f.id === cinematicFileId);
+    if (file) {
+      return (
+        <div className="bg-white min-h-screen relative">
+          <button 
+            onClick={() => setCinematicFileId(null)}
+            className="fixed top-8 right-8 z-[100] bg-white text-zinc-900 px-6 py-2 rounded-full shadow-lg border border-zinc-200 font-medium text-sm hover:scale-105 transition-transform"
+          >
+            Close Sequence
+          </button>
+          <CinematicFormatSequence file={file} />
+        </div>
+      );
+    }
+  }
 
   return (
     <div className="relative w-full min-h-screen bg-[#F9F9F7] text-[#111111] font-sans selection:bg-zinc-200 overflow-x-hidden">
@@ -254,43 +297,61 @@ const App: React.FC = () => {
       <main className="relative z-20 max-w-5xl mx-auto px-6 pb-32 flex flex-col mt-[-100vh]">
         <div className="w-full flex-1 pt-[38vh]">
           {/* Semantic text underneath the converging animated title */}
-          <div className="text-center mb-16 max-w-2xl mx-auto px-4">
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-100px" }}
+            transition={{ duration: 0.8, ease: "easeOut" }}
+            className="text-center mb-16 max-w-2xl mx-auto px-4"
+          >
             <p className="text-zinc-600 text-lg md:text-xl leading-relaxed tracking-wide font-medium">
               An intelligent conduit for your data. Drop documents below to instantly extract parsed structures, convert across complex schemas, or generate exact fillable forms.
             </p>
-          </div>
+          </motion.div>
 
           {/* Mode Switcher */}
-          <div className="flex justify-center mb-8">
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-50px" }}
+            transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }}
+            className="flex justify-center mb-8"
+          >
             <div className="bg-white border border-zinc-200 rounded-full p-1 shadow-sm inline-flex">
               <button 
                 onClick={() => setActiveTab('specialists')}
-                className={`py-2 px-6 rounded-full text-sm font-medium transition-colors ${activeTab === 'specialists' ? 'bg-zinc-900 text-white' : 'text-zinc-500 hover:text-zinc-900'}`}
+                className={`py-2 px-6 rounded-full text-sm font-medium transition-colors ${activeTab === 'specialists' ? 'bg-zinc-900 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-900'}`}
               >
                 Specialist Routing
               </button>
               <button 
                 onClick={() => setActiveTab('universal')}
-                className={`py-2 px-6 rounded-full text-sm font-medium transition-colors flex items-center space-x-2 ${activeTab === 'universal' ? 'bg-zinc-900 text-white' : 'text-zinc-500 hover:text-zinc-900'}`}
+                className={`py-2 px-6 rounded-full text-sm font-medium transition-colors flex items-center space-x-2 ${activeTab === 'universal' ? 'bg-zinc-900 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-900'}`}
               >
                 <ArrowRightLeft className="w-3.5 h-3.5" />
                 <span>Universal Format Graph</span>
               </button>
             </div>
-          </div>
+          </motion.div>
 
-          <AnimatePresence mode="wait">
-            {activeTab === 'specialists' ? (
-              <motion.div 
-                key="specialists"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-              >
-                {/* Drag & Drop Area */}
-                <div className="mb-16 shadow-2xl shadow-zinc-200/50">
-                  <DropZone onFilesDropped={processFiles} acceptAllFiles={true} />
-                </div>
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-100px" }}
+            transition={{ duration: 0.8, ease: "easeOut", delay: 0.4 }}
+          >
+            <AnimatePresence mode="wait">
+              {activeTab === 'specialists' ? (
+                <motion.div 
+                  key="specialists"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                >
+                  {/* Drag & Drop Area */}
+                  <div className="mb-16 shadow-2xl shadow-zinc-200/50">
+                    <DropZone onFilesDropped={processFiles} acceptAllFiles={true} />
+                  </div>
 
                 {/* Results List */}
                 {files.length > 0 && (
@@ -337,7 +398,9 @@ const App: React.FC = () => {
                           key={file.id} 
                           file={file} 
                           onRemove={removeFile} 
-                          onProcess={handleProcessFile} 
+                          onProcess={handleProcessFile}
+                          onAnalyze={handleAnalyzeFile}
+                          onCinematic={setCinematicFileId} 
                         />
                       ))}
                     </div>
@@ -372,7 +435,8 @@ const App: React.FC = () => {
               </motion.div>
             )}
           </AnimatePresence>
-        </div>
+        </motion.div>
+      </div>
       </main>
       
       {/* Footer */}

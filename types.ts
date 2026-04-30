@@ -21,4 +21,6 @@ export interface ProcessedFile {
   images?: string[];
   rawFile?: File;
   performedAction?: string;
+  aiMetadata?: any;
+  aiStatus?: 'IDLE' | 'ANALYZING' | 'COMPLETED' | 'ERROR';
 }

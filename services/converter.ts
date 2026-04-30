@@ -237,7 +237,8 @@ export const processUniversalFile = async (file: File, action: string = 'markdow
     const buffer = await readFileAsArrayBuffer(file);
     
     // Extract HTML using mammoth
-    const mammoth = (await import('mammoth')).default;
+    const mammothModule = await import('mammoth');
+    const mammoth = mammothModule.default || mammothModule;
     const result = await mammoth.convertToHtml({ arrayBuffer: buffer });
     const html = result.value;
     const sn = getSmartFilename(file.name, html);
@@ -265,7 +266,8 @@ export const processUniversalFile = async (file: File, action: string = 'markdow
           jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
         };
         
-        const html2pdf = (await import('html2pdf.js')).default;
+        const html2pdfModule = await import('html2pdf.js');
+        const html2pdf = html2pdfModule.default || html2pdfModule;
         const pdfBlob = await html2pdf().set(opt).from(container).output('blob');
         pdfUrl = URL.createObjectURL(pdfBlob);
       } catch (err) {
