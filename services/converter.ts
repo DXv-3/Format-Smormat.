@@ -165,40 +165,45 @@ const readFileAsText = (file: File): Promise<string> => {
   });
 };
 
-export const processUniversalFile = async (file: File, action: string = 'markdown_raw'): Promise<{ markdown?: string, smartName: string, pdfUrl?: string, images?: string[], fillablePdfUrl?: string }> => {
+import { runAiTransformation } from './ai';
+
+export const processUniversalFile = async (file: File, action: string = 'markdown_raw', customInstruction?: string): Promise<{ markdown?: string, smartName: string, pdfUrl?: string, images?: string[], fillablePdfUrl?: string }> => {
   const name = file.name.toLowerCase();
-  const smartName = getSmartFilename(file.name, "");
+  let smartName = getSmartFilename(file.name, "");
+  let extractedMarkdown = "";
+  let pdfUrl: string | undefined;
+  let fillablePdfUrl: string | undefined;
+  let images: string[] = [];
+  
+  // Decide what local action to use if the user actually requested an AI transformation
+  const localAction = action.startsWith('ai_') ? 'markdown_raw' : action;
 
   // 1. Handle HTML
   if (name.endsWith('.html') || name.endsWith('.htm')) {
     const text = await readFileAsText(file);
-    const sn = getSmartFilename(file.name, text);
-    const markdown = convertHtmlToMarkdown(text, action === 'markdown_smart');
-    return { markdown, smartName: sn };
+    smartName = getSmartFilename(file.name, text);
+    extractedMarkdown = convertHtmlToMarkdown(text, localAction === 'markdown_smart');
   }
   
   // 2. Handle JSON
-  if (name.endsWith('.json')) {
+  else if (name.endsWith('.json')) {
     const text = await readFileAsText(file);
-    const sn = getSmartFilename(file.name, text);
-    const markdown = convertJsonToMarkdown(text);
-    return { markdown, smartName: sn };
+    smartName = getSmartFilename(file.name, text);
+    extractedMarkdown = convertJsonToMarkdown(text);
   }
   
   // 3. Handle CSV
-  if (name.endsWith('.csv')) {
+  else if (name.endsWith('.csv')) {
     const text = await readFileAsText(file);
-    const markdown = `\`\`\`csv\n${text}\n\`\`\``;
-    return { markdown, smartName };
+    extractedMarkdown = `\`\`\`csv\n${text}\n\`\`\``;
   }
 
   // 4. Handle ZIP and CRX (Chrome Extensions)
-  if (name.endsWith('.zip') || name.endsWith('.crx')) {
+  else if (name.endsWith('.zip') || name.endsWith('.crx')) {
     const buffer = await readFileAsArrayBuffer(file);
     let zipBuffer = buffer;
     
     // CRX files have a header before the ZIP archive starts.
-    // The ZIP archive starts with 'PK\x03\x04' (50 4B 03 04).
     if (name.endsWith('.crx')) {
       const view = new Uint8Array(buffer);
       let zipStart = -1;
@@ -214,44 +219,32 @@ export const processUniversalFile = async (file: File, action: string = 'markdow
     }
 
     const zip = await JSZip.loadAsync(zipBuffer);
-    let combinedMarkdown = `# Extracted Archive: ${file.name}\n\n`;
-    
+    extractedMarkdown = `# Extracted Archive: ${file.name}\n\n`;
     const textExtensions = ['.txt', '.md', '.js', '.ts', '.jsx', '.tsx', '.json', '.html', '.css', '.csv'];
     
     for (const [relativePath, zipEntry] of Object.entries(zip.files)) {
       if (zipEntry.dir) continue;
-      
       const ext = relativePath.substring(relativePath.lastIndexOf('.')).toLowerCase();
       if (textExtensions.includes(ext) || relativePath.includes('manifest.json')) {
         const content = await zipEntry.async('string');
-        combinedMarkdown += `## File: \`${relativePath}\`\n\n\`\`\`${ext.replace('.', '')}\n${content}\n\`\`\`\n\n`;
+        extractedMarkdown += `## File: \`${relativePath}\`\n\n\`\`\`${ext.replace('.', '')}\n${content}\n\`\`\`\n\n`;
       }
     }
-    
-    const smartName = getSmartFilename(file.name, "");
-    return { markdown: combinedMarkdown, smartName };
   }
   
   // 5. Handle DOCX
-  if (name.endsWith('.docx')) {
+  else if (name.endsWith('.docx')) {
     const buffer = await readFileAsArrayBuffer(file);
-    
-    // Extract HTML using mammoth
     const mammothModule = await import('mammoth');
     const mammoth = mammothModule.default || mammothModule;
     const result = await mammoth.convertToHtml({ arrayBuffer: buffer });
     const html = result.value;
-    const sn = getSmartFilename(file.name, html);
+    smartName = getSmartFilename(file.name, html);
     
-    // Generate PDF from the HTML if requested
-    if (action === 'docx_to_pdf') {
-      let pdfUrl: string | undefined;
+    if (localAction === 'docx_to_pdf') {
       try {
-        // Create a temporary container for html2pdf
         const container = document.createElement('div');
         container.innerHTML = html;
-        
-        // Basic styling for the PDF
         container.style.padding = '40px';
         container.style.fontFamily = 'Arial, sans-serif';
         container.style.lineHeight = '1.6';
@@ -273,30 +266,24 @@ export const processUniversalFile = async (file: File, action: string = 'markdow
       } catch (err) {
         console.error("Failed to generate PDF:", err);
       }
-      return { smartName: sn, pdfUrl, markdown: `*Converted ${file.name} to PDF*` };
+      extractedMarkdown = `*Converted ${file.name} to PDF*`;
+    } else {
+      extractedMarkdown = convertHtmlToMarkdown(html, false);
     }
-
-    // Otherwise standard markdown return
-    const markdown = convertHtmlToMarkdown(html, false);
-    return { markdown, smartName: sn };
   }
 
-  // Handle PDF
-  if (name.endsWith('.pdf')) {
+  // 6. Handle PDF
+  else if (name.endsWith('.pdf')) {
     const buffer = await readFileAsArrayBuffer(file);
-
-    // Explicitly load pdfjs-dist 
     const pdfjsLib = await import('pdfjs-dist');
     const pdfWorkerUrl = (await import('pdfjs-dist/build/pdf.worker.mjs?url')).default;
     pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
-    // pdfjsLib detaches the buffer, making it unusable for pdf-lib below unless we duplicate it
     const bufferForPdfLib = buffer.slice(0);
     const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
     const numPages = pdf.numPages;
 
-    if (action === 'extract_images') {
-      const images: string[] = [];
+    if (localAction === 'extract_images') {
       for (let i = 1; i <= numPages; i++) {
         const page = await pdf.getPage(i);
         const viewport = page.getViewport({ scale: 2.0 });
@@ -309,19 +296,14 @@ export const processUniversalFile = async (file: File, action: string = 'markdow
           images.push(canvas.toDataURL('image/png'));
         }
       }
-      return { smartName, images, markdown: `*Extracted ${numPages} pages as PNG images from ${file.name}*` };
-    }
-
-    if (action === 'pdf_fillable') {
+      extractedMarkdown = `*Extracted ${numPages} pages as PNG images from ${file.name}*`;
+    } else if (localAction === 'pdf_fillable') {
       let createdFillable = false;
-      let fillablePdfUrl: string | undefined;
-
       try {
         const { PDFDocument, rgb } = await import('pdf-lib');
         const pdfDoc = await PDFDocument.load(bufferForPdfLib);
         const form = pdfDoc.getForm();
         const pdfLibPages = pdfDoc.getPages();
-        
         let fieldCount = 0;
 
         for (let i = 1; i <= numPages; i++) {
@@ -334,7 +316,6 @@ export const processUniversalFile = async (file: File, action: string = 'markdow
               const height = item.height || 12;
               const x = item.transform[4];
               const y = item.transform[5];
-              
               try {
                 const textField = form.createTextField(`auto_field_${fieldCount++}`);
                 textField.addToPage(pdfLibPages[i - 1], {
@@ -361,22 +342,38 @@ export const processUniversalFile = async (file: File, action: string = 'markdow
         console.warn("Could not generate fillable PDF", e);
       }
       
-      let markdown = createdFillable 
+      extractedMarkdown = createdFillable 
         ? `**✨ Magic Fillable PDF Created**: Detected and converted blank lines into interactive form fields!`
         : `*No blank lines found to convert into fillable fields for ${file.name}.*`;
-      
-      return { smartName, fillablePdfUrl, markdown };
+    } else {
+      // Basic PDF text extraction for Gemini / raw processing
+      let fullText = '';
+      for (let i = 1; i <= numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        fullText += textContent.items.map((it: any) => it.str).join(' ') + '\n\n';
+      }
+      extractedMarkdown = fullText;
     }
-
-    // Default action fallback
-    return { smartName, markdown: `*Processed ${file.name} as standard PDF*` };
   }
 
-  // 6. Fallback for any other text-like file (TXT, MD, JS, etc.)
-  const text = await readFileAsText(file);
-  const sn = getSmartFilename(file.name, text);
-  const ext = name.substring(name.lastIndexOf('.') + 1);
-  const markdown = `\`\`\`${ext}\n${text}\n\`\`\``;
-  
-  return { markdown, smartName: sn };
+  // 7. Fallback for any other text-like file
+  else {
+    const text = await readFileAsText(file);
+    smartName = getSmartFilename(file.name, text);
+    const ext = name.substring(name.lastIndexOf('.') + 1);
+    extractedMarkdown = `\`\`\`${ext}\n${text}\n\`\`\``;
+  }
+
+  // Apply AI Transformation if requested
+  if (action.startsWith('ai_')) {
+    try {
+      extractedMarkdown = await runAiTransformation(file, extractedMarkdown, action, customInstruction);
+    } catch (e) {
+      console.error("AI Transformation Failed", e);
+      extractedMarkdown = `*AI Transformation Failed: ${String(e)}*\n\n---\n\n${extractedMarkdown}`;
+    }
+  }
+
+  return { markdown: extractedMarkdown, smartName, pdfUrl, images, fillablePdfUrl };
 };

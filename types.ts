@@ -1,5 +1,7 @@
 export enum ConversionStatus {
   IDLE = 'IDLE',
+  ANALYZING_INGESTION = 'ANALYZING_INGESTION',
+  GAME_PLAN_READY = 'GAME_PLAN_READY',
   AWAITING_ACTION = 'AWAITING_ACTION',
   READING = 'READING',
   PROCESSING = 'PROCESSING',
@@ -23,4 +25,5 @@ export interface ProcessedFile {
   performedAction?: string;
   aiMetadata?: any;
   aiStatus?: 'IDLE' | 'ANALYZING' | 'COMPLETED' | 'ERROR';
+  suggestedActions?: { id: string, name: string, type: 'specialist' | 'universal', desc: string }[];
 }

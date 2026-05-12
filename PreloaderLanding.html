@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RICHARD SANCHO</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; background-color: #0a0a0a; overflow: hidden; font-family: 'Inter', sans-serif; }
+        
+        .noise {
+            position: absolute;
+            inset: 0;
+            background: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyBAMAAADsG5ZKAAAAGFBMVEUAAAAAAAAAAAAAAAAAAAAAAAAAAACh3Y4lAAAABnRSTlMAAAAAAABswEPmAAAAQUlEQVQ4y2NgwA0YGBgYGEQAAhYQ7AEAAAAAADAwACABAAAAAADAwACABAAAAAADAwACABAAAAAAAQAAAAMZ1d86AAAAAElFTkSuQmCC');
+            opacity: 0.15;
+            pointer-events: none;
+        }
+
+        @keyframes liquid-gradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .gradient-loader {
+            background: radial-gradient(circle, #8b5cf6, #06b6d4, #d946ef, #000);
+            background-size: 400% 400%;
+            animation: liquid-gradient 15s ease infinite;
+            filter: blur(40px);
+        }
+
+        @keyframes pulse-scale {
+            0%, 100% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.1); opacity: 0.5; }
+        }
+
+        .anim-element { animation: pulse-scale 6s ease-in-out infinite; }
+    </style>
+</head>
+<body class="w-screen h-screen flex flex-col items-center justify-center">
+    <div class="noise"></div>
+    
+    <div id="loader" class="flex flex-col items-center gap-12 transition-all duration-1000 ease-in-out">
+        <div class="relative w-32 h-32 flex items-center justify-center">
+            <div class="absolute inset-0 rounded-full gradient-loader anim-element"></div>
+            <div class="absolute inset-2 rounded-full bg-[#0a0a0a]"></div>
+        </div>
+        
+        <h1 class="text-white tracking-[0.4em] uppercase text-xs font-light tracking-wide opacity-80">
+            Richard Sancho
+        </h1>
+    </div>
+
+    <script>
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                const loader = document.getElementById('loader');
+                loader.style.opacity = '0';
+                loader.style.transform = 'scale(0.95)';
+                setTimeout(() => loader.remove(), 1000);
+            }, 3000);
+        });
+    </script>
+</body>
+</html>

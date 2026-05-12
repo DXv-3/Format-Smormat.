@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { Check, Download, FileText, ChevronDown, ChevronUp, Trash2, FileType, Image as ImageIcon, Edit3, Sparkles } from 'lucide-react';
 import { ProcessedFile, ConversionStatus } from '../types';
 import JSZip from 'jszip';
@@ -14,6 +15,7 @@ interface FileItemProps {
 
 const FileItem: React.FC<FileItemProps> = React.memo(({ file, onRemove, onProcess, onAnalyze, onCinematic }) => {
   const [expanded, setExpanded] = useState(false);
+  const [showFullMarkdown, setShowFullMarkdown] = useState(false);
 
   // Cleanup object URLs when the file is removed or component unmounted to prevent memory leaks
   useEffect(() => {
@@ -24,6 +26,31 @@ const FileItem: React.FC<FileItemProps> = React.memo(({ file, onRemove, onProces
       // E.g., `App.tsx -> removeFile()` should handle the URL revoke.
     };
   }, []);
+
+const ActionButton = ({ onClick, disabled, className, title, icon: Icon, children, isProcessing }) => (
+  <motion.button 
+    whileHover={{ scale: 1.02 }}
+    whileTap={{ scale: 0.98 }}
+    onClick={onClick}
+    disabled={disabled}
+    className={`
+      relative overflow-hidden flex items-center space-x-1.5 px-3 py-1.5 font-medium text-xs rounded-sm transition-all shadow-sm
+      ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
+      ${className}
+    `}
+    title={title}
+  >
+    {isProcessing && (
+        <motion.div
+            className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
+            animate={{ x: ['-100%', '100%'] }}
+            transition={{ repeat: Infinity, duration: 1.5, ease: 'linear' }}
+        />
+    )}
+    <Icon className={`w-3.5 h-3.5 ${isProcessing ? 'animate-spin' : ''}`} />
+    <span className="hidden sm:inline z-10">{children}</span>
+  </motion.button>
+);
 
   useEffect(() => {
     if (file.aiStatus === 'ANALYZING' && !expanded) {
@@ -180,7 +207,6 @@ const FileItem: React.FC<FileItemProps> = React.memo(({ file, onRemove, onProces
           </div>
         </div>
 
-        {/* Status Layout - Triage Mode vs Completed Mode */}
         {file.status === ConversionStatus.AWAITING_ACTION ? (
           <div className="w-full mt-4 pt-4 border-t border-zinc-100">
             <h5 className="text-[10px] font-semibold text-zinc-400 uppercase tracking-widest mb-3">Specialist Recommendations</h5>
@@ -284,15 +310,16 @@ const FileItem: React.FC<FileItemProps> = React.memo(({ file, onRemove, onProces
               
                 {file.content && (
                   <>
-                    <button 
+                    <ActionButton 
                       onClick={() => onAnalyze?.(file.id)}
                       disabled={file.aiStatus === 'ANALYZING' || file.aiStatus === 'COMPLETED'}
-                      className={`flex items-center space-x-1.5 px-3 py-1.5 font-medium text-xs transition-all shadow-sm rounded-sm text-white ${file.aiStatus === 'COMPLETED' ? 'bg-purple-400 cursor-default' : 'bg-gradient-to-r from-purple-500 to-fuchsia-400 hover:from-purple-600 hover:to-fuchsia-500 shadow-[0_0_10px_rgba(168,85,247,0.3)]'}`}
+                      isProcessing={file.aiStatus === 'ANALYZING'}
+                      className={`text-white ${file.aiStatus === 'COMPLETED' ? 'bg-purple-400 cursor-default' : 'bg-gradient-to-r from-purple-500 to-fuchsia-400 hover:from-purple-600 hover:to-fuchsia-500 shadow-[0_0_10px_rgba(168,85,247,0.3)]'}`}
                       title={file.aiStatus === 'COMPLETED' ? 'AI Analysis Complete' : 'Extract Insights with AI'}
+                      icon={Sparkles}
                     >
-                      <Sparkles className={`w-3.5 h-3.5 ${file.aiStatus === 'ANALYZING' ? 'animate-spin' : ''}`} />
-                      <span className="hidden sm:inline">{file.aiStatus === 'ANALYZING' ? 'Analyzing...' : file.aiStatus === 'COMPLETED' ? 'Insights Extracted' : 'Extract Insights'}</span>
-                    </button>
+                       {file.aiStatus === 'ANALYZING' ? 'Analyzing...' : file.aiStatus === 'COMPLETED' ? 'Insights Extracted' : 'Extract Insights'}
+                    </ActionButton>
 
                     <button 
                       onClick={() => setExpanded(!expanded)}
@@ -302,47 +329,48 @@ const FileItem: React.FC<FileItemProps> = React.memo(({ file, onRemove, onProces
                       {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                     </button>
                     
-                    <button 
+                    <ActionButton 
                       onClick={handleDownload}
-                      className="flex items-center space-x-1.5 bg-zinc-900 hover:bg-zinc-800 text-white px-3 py-1.5 font-medium text-xs transition-colors rounded-sm"
+                      className="bg-zinc-900 hover:bg-zinc-800 text-white"
+                      title="Download MD"
+                      icon={Download}
                     >
-                      <Download className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Download MD</span>
-                    </button>
+                      Download MD
+                    </ActionButton>
                   </>
                 )}
                 
                 {file.pdfUrl && (
-                  <button 
+                  <ActionButton 
                     onClick={handleDownloadPdf}
-                    className="flex items-center space-x-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 px-3 py-1.5 font-medium text-xs transition-colors border border-zinc-200 rounded-sm"
+                    className="bg-zinc-100 hover:bg-zinc-200 text-zinc-900 border border-zinc-200"
                     title="Download as PDF"
+                    icon={FileType}
                   >
-                    <FileType className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">PDF</span>
-                  </button>
+                    PDF
+                  </ActionButton>
                 )}
 
                 {file.fillablePdfUrl && (
-                  <button 
+                  <ActionButton 
                     onClick={handleDownloadFillable}
-                    className="flex items-center space-x-1.5 bg-gradient-to-r from-teal-500 to-teal-400 hover:from-teal-600 hover:to-teal-500 text-white font-medium text-xs px-3 py-1.5 transition-all shadow-[0_0_10px_rgba(45,212,191,0.3)] rounded-sm"
+                    className="bg-gradient-to-r from-teal-500 to-teal-400 text-white shadow-[0_0_10px_rgba(45,212,191,0.3)]"
                     title="Download Interactive Fillable PDF"
+                    icon={Edit3}
                   >
-                    <Edit3 className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Fillable</span>
-                  </button>
+                    Fillable
+                  </ActionButton>
                 )}
 
                 {file.images && file.images.length > 0 && (
-                  <button 
+                  <ActionButton 
                     onClick={handleDownloadPngs}
-                    className="flex items-center space-x-1.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-white px-3 py-1.5 font-medium text-xs transition-all shadow-[0_0_10px_rgba(251,191,36,0.3)] rounded-sm"
+                    className="bg-gradient-to-r from-amber-400 to-amber-500 text-white shadow-[0_0_10px_rgba(251,191,36,0.3)]"
                     title="Download PNGs"
+                    icon={ImageIcon}
                   >
-                    <ImageIcon className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">PNGs</span>
-                  </button>
+                    PNGs
+                  </ActionButton>
                 )}
               </>
             )}
@@ -358,7 +386,6 @@ const FileItem: React.FC<FileItemProps> = React.memo(({ file, onRemove, onProces
         )}
       </div>
 
-      {/* Preview Section */}
       {expanded && file.status === ConversionStatus.COMPLETED && (
         <div className="border-t border-zinc-200 bg-zinc-50 p-4 sm:p-6">
           {file.aiMetadata && (
@@ -410,11 +437,16 @@ const FileItem: React.FC<FileItemProps> = React.memo(({ file, onRemove, onProces
 
           <div className="flex justify-between items-center mb-3">
             <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Markdown Preview</span>
-            <span className="text-[10px] text-zinc-400">First 500 chars</span>
+            <button 
+              onClick={() => setShowFullMarkdown(!showFullMarkdown)}
+              className="text-[10px] text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 px-2 py-1 rounded transition-colors"
+            >
+              {showFullMarkdown ? 'Show Less' : `Show Full Output (${(file.content.length / 1000).toFixed(1)}kb)`}
+            </button>
           </div>
-          <pre className="text-xs leading-relaxed text-zinc-700 font-mono whitespace-pre-wrap break-all bg-white p-4 border border-zinc-200 max-h-48 overflow-y-auto mb-6 shadow-sm">
-            {file.content.slice(0, 500)}
-            {file.content.length > 500 && '...'}
+          <pre className={`text-xs leading-relaxed text-zinc-700 font-mono whitespace-pre-wrap break-all bg-white p-4 border border-zinc-200 overflow-y-auto mb-6 shadow-sm ${showFullMarkdown ? 'max-h-[600px]' : 'max-h-48'}`}>
+            {showFullMarkdown ? file.content : file.content.slice(0, 500)}
+            {!showFullMarkdown && file.content.length > 500 && '...'}
           </pre>
           
           {file.images && file.images.length > 0 && (

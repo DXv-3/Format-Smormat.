@@ -10,50 +10,40 @@ import { extractDocumentMetadata } from './services/ai';
 import { conversionGraph } from './lib/format-router/graph';
 import { bootstrapFormatRouter } from './lib/format-router/bootstrap';
 
-import { CinematicFormatSequence } from './components/CinematicFormatSequence';
+import { CinematicTransformationView } from './components/CinematicTransformationView';
+import { Preloader } from './components/Preloader';
+import { HeroSequence } from './components/HeroSequence';
+import { IngestionEngine } from './components/IngestionEngine';
 
 const App: React.FC = () => {
   const [files, setFiles] = useState<ProcessedFile[]>([]);
   const [copiedAll, setCopiedAll] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'specialists' | 'universal'>('specialists');
   const [cinematicFileId, setCinematicFileId] = useState<string | null>(null);
+  const [appReady, setAppReady] = useState(false);
 
   // Re-introducing scroll controls for the arc sequence
   const heroRef = useRef<HTMLDivElement>(null);
+  const { scrollYProgress } = useScroll();
+  const appBgColor = useTransform(
+    scrollYProgress,
+    [0, 0.5, 0.8, 1],
+    ['#F9F9F7', '#F9F9F7', '#eef2f3', '#e0e5ec']
+  );
 
   useEffect(() => {
     bootstrapFormatRouter();
     conversionGraph.initAllSupported();
   }, []);
-  const { scrollYProgress } = useScroll({
-    target: heroRef,
-    offset: ["start start", "end start"]
-  });
-
-  const titleScale = useTransform(scrollYProgress, [0, 0.2, 0.6, 1], [1, 1, 0.8, 0.8]);
-
-  // Format (Left Arc)
-  const formatX = useTransform(scrollYProgress, [0, 0.2, 0.6, 1], ["0vw", "-35vw", "-1vw", "-1vw"]);
-  const formatY = useTransform(scrollYProgress, [0, 0.2, 0.6, 1], ["0vh", "25vh", "-35vh", "-35vh"]);
-  const formatRotate = useTransform(scrollYProgress, [0, 0.2, 0.4, 0.6, 1], [0, -45, -15, 0, 0]);
-
-  // Smormat (Right Arc)
-  const smormatX = useTransform(scrollYProgress, [0, 0.2, 0.6, 1], ["0vw", "35vw", "1vw", "1vw"]);
-  const smormatY = formatY; 
-  const smormatRotate = useTransform(scrollYProgress, [0, 0.2, 0.4, 0.6, 1], [0, 45, 15, 0, 0]);
-
-  // Hint text at the beginning
-  const hintOpacity = useTransform(scrollYProgress, [0, 0.1], [1, 0]);
 
   const processFiles = useCallback((incomingFiles: File[]) => {
     const newEntries: ProcessedFile[] = incomingFiles.map(file => ({
-      id: crypto.randomUUID(),
+      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
       originalName: file.name,
       markdownName: file.name,
       content: '',
       originalSize: file.size,
-      status: ConversionStatus.AWAITING_ACTION,
+      status: ConversionStatus.ANALYZING_INGESTION,
       timestamp: Date.now(),
       rawFile: file
     }));
@@ -61,51 +51,43 @@ const App: React.FC = () => {
     setFiles(prev => [...newEntries, ...prev]);
   }, []);
 
-  const handleProcessFile = useCallback(async (id: string, action: string) => {
-    setFiles(current => {
-      const fileEntry = current.find(f => f.id === id);
-      if (!fileEntry || !fileEntry.rawFile) return current;
+  const handleProcessFile = useCallback(async (id: string, action: string, customInstruction?: string) => {
+    const fileEntry = files.find(f => f.id === id);
+    if (!fileEntry || !fileEntry.rawFile) return;
 
-      // Optimistic update
-      const loadingState = current.map(f => f.id === id ? { ...f, status: ConversionStatus.PROCESSING, performedAction: action } : f);
-      
-      // We must execute the async logic outside of the setFiles state updater
-      processUniversalFile(fileEntry.rawFile, action).then(result => {
-        setFiles(inner => inner.map(f => f.id === id ? { 
-          ...f, 
-          status: ConversionStatus.COMPLETED,
-          content: result.markdown || '',
-          markdownName: result.smartName || f.originalName,
-          pdfUrl: result.pdfUrl,
-          images: result.images,
-          fillablePdfUrl: result.fillablePdfUrl
-        } : f));
-      }).catch(err => {
-        console.error(err);
-        setFiles(inner => inner.map(f => f.id === id ? { ...f, status: ConversionStatus.ERROR, errorMessage: 'Processing failed' } : f));
-      });
-      
-      return loadingState;
-    });
-  }, []);
+    // Optimistic update
+    setFiles(current => current.map(f => f.id === id ? { ...f, status: ConversionStatus.PROCESSING, performedAction: action } : f));
+    
+    try {
+      const result = await processUniversalFile(fileEntry.rawFile, action, customInstruction);
+      setFiles(inner => inner.map(f => f.id === id ? { 
+        ...f, 
+        status: ConversionStatus.COMPLETED,
+        content: result.markdown || '',
+        markdownName: result.smartName || f.originalName,
+        pdfUrl: result.pdfUrl,
+        images: result.images,
+        fillablePdfUrl: result.fillablePdfUrl
+      } : f));
+    } catch (err) {
+      console.error(err);
+      setFiles(inner => inner.map(f => f.id === id ? { ...f, status: ConversionStatus.ERROR, errorMessage: 'Processing failed' } : f));
+    }
+  }, [files]);
 
   const handleAnalyzeFile = useCallback((id: string) => {
-    setFiles(current => {
-      const fileEntry = current.find(f => f.id === id);
-      if (!fileEntry || !fileEntry.content) return current;
+    const fileEntry = files.find(f => f.id === id);
+    if (!fileEntry || !fileEntry.content) return;
 
-      const loadingState = current.map(f => f.id === id ? { ...f, aiStatus: 'ANALYZING' } : f);
+    setFiles(current => current.map(f => f.id === id ? { ...f, aiStatus: 'ANALYZING' as any } : f));
 
-      extractDocumentMetadata(fileEntry.content, fileEntry.originalName).then(metadata => {
-        setFiles(inner => inner.map(f => f.id === id ? { ...f, aiStatus: 'COMPLETED', aiMetadata: metadata } : f));
-      }).catch(err => {
-        console.error(err);
-        setFiles(inner => inner.map(f => f.id === id ? { ...f, aiStatus: 'ERROR' } : f));
-      });
-
-      return loadingState;
+    extractDocumentMetadata(fileEntry.content, fileEntry.originalName).then(metadata => {
+      setFiles(inner => inner.map(f => f.id === id ? { ...f, aiStatus: 'COMPLETED' as any, aiMetadata: metadata } : f));
+    }).catch(err => {
+      console.error(err);
+      setFiles(inner => inner.map(f => f.id === id ? { ...f, aiStatus: 'ERROR' as any } : f));
     });
-  }, []);
+  }, [files]);
 
   const removeFile = useCallback((id: string) => {
     setFiles(prev => {
@@ -178,39 +160,41 @@ const App: React.FC = () => {
           >
             Close Sequence
           </button>
-          <CinematicFormatSequence file={file} />
+          <CinematicTransformationView file={file} onClose={() => setCinematicFileId(null)} />
         </div>
       );
     }
   }
 
   return (
-    <div className="relative w-full min-h-screen bg-[#F9F9F7] text-[#111111] font-sans selection:bg-zinc-200 overflow-x-hidden">
-      
-      {/* Refined Navigation Menu */}
-      <motion.header 
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 3.1, duration: 0.8, ease: "easeOut" }}
-        className="fixed top-0 left-0 right-0 z-50 bg-[#F9F9F7]/90 backdrop-blur-md border-b border-zinc-200/60"
-      >
-        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="w-6 h-6 bg-black text-white flex items-center justify-center rounded-sm">
-              <FileDiff className="w-3.5 h-3.5" />
-            </div>
-            <span className="text-sm font-semibold tracking-wide uppercase">Format Smormat</span>
-          </div>
-          
-          <button 
-            onClick={() => setMenuOpen(!menuOpen)}
-            className="text-zinc-900 hover:text-zinc-500 transition-colors p-2"
-            aria-label="Toggle Menu"
+    <motion.div style={{ backgroundColor: appBgColor }} className="relative w-full min-h-screen text-[#111111] font-sans selection:bg-zinc-200 overflow-x-hidden">
+      {!appReady && <Preloader onComplete={() => setAppReady(true)} />}
+      {appReady && (
+        <>
+          {/* Refined Navigation Menu */}
+          <motion.header 
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.8, duration: 0.8, ease: "easeOut" }}
+            className="fixed top-0 left-0 right-0 z-50 bg-[#F9F9F7]/90 backdrop-blur-md border-b border-zinc-200/60"
           >
-            {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </button>
-        </div>
-      </motion.header>
+            <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="w-6 h-6 bg-black text-white flex items-center justify-center rounded-sm">
+                  <FileDiff className="w-3.5 h-3.5" />
+                </div>
+                <span className="text-sm font-semibold tracking-wide uppercase">FMT</span>
+              </div>
+              
+              <button 
+                onClick={() => setMenuOpen(!menuOpen)}
+                className="text-zinc-900 hover:text-zinc-500 transition-colors p-2"
+                aria-label="Toggle Menu"
+              >
+                {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              </button>
+            </div>
+          </motion.header>
 
       {/* Full-screen Menu Overlay */}
       <AnimatePresence>
@@ -242,60 +226,12 @@ const App: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Scroll-linked Hero Arc Sequence */}
-      <div ref={heroRef} className="h-[250vh] relative z-10 block">
-        <motion.div 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 1.5, ease: "easeOut" }}
-          className="sticky top-0 h-screen flex flex-col items-center justify-center overflow-hidden px-6 pointer-events-none"
-        >
-          <motion.div style={{ scale: titleScale }} className="flex space-x-4 md:space-x-8 pointer-events-auto">
-            {/* Left Arc Text */}
-            <motion.div
-              style={{ x: formatX, y: formatY, rotate: formatRotate }}
-              className="text-6xl md:text-8xl lg:text-9xl font-serif font-medium tracking-tight cursor-default group"
-            >
-              <span className="block relative z-10 bg-clip-text text-transparent bg-gradient-to-r from-zinc-900 via-zinc-700 to-zinc-900 transition-opacity duration-700 group-hover:opacity-0">
-                Format
-              </span>
-              <span className="block absolute left-0 top-0 z-20 bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 opacity-0 group-hover:opacity-100 transition-opacity duration-700 animate-text-gradient whitespace-nowrap">
-                Format
-              </span>
-            </motion.div>
-
-            {/* Right Arc Text */}
-            <motion.div
-              style={{ x: smormatX, y: smormatY, rotate: smormatRotate }}
-              className="text-6xl md:text-8xl lg:text-9xl font-serif font-medium tracking-tight cursor-default group"
-            >
-              <span className="block relative z-10 bg-clip-text text-transparent bg-gradient-to-r from-zinc-900 via-zinc-700 to-zinc-900 transition-opacity duration-700 group-hover:opacity-0">
-                Smormat
-              </span>
-              <span className="block absolute left-0 top-0 z-20 bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 opacity-0 group-hover:opacity-100 transition-opacity duration-700 animate-text-gradient whitespace-nowrap">
-                Smormat
-              </span>
-            </motion.div>
-          </motion.div>
-
-          <motion.div style={{ opacity: hintOpacity }} className="absolute bottom-12 left-0 right-0 text-center">
-            <div className="flex items-center justify-center space-x-2 text-xs font-medium tracking-widest uppercase text-zinc-400">
-              <span className="cursor-default">Scroll to Sequence</span>
-              <span className="w-1 h-1 rounded-full bg-zinc-300"></span>
-              <motion.div
-                animate={{ y: [0, 5, 0] }}
-                transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-              >
-                <Download className="w-3.5 h-3.5" />
-              </motion.div>
-            </div>
-          </motion.div>
-        </motion.div>
-      </div>
+      {/* Hero Sequence */}
+      <HeroSequence />
 
       {/* Main Content Area - Native Scroll overlapping from bottom */}
-      <main className="relative z-20 max-w-5xl mx-auto px-6 pb-32 flex flex-col mt-[-100vh]">
-        <div className="w-full flex-1 pt-[38vh]">
+      <main className="relative z-20 max-w-5xl mx-auto px-6 pb-32 flex flex-col mt-[-100vh] pt-[45vh]">
+        <div className="w-full flex-1">
           {/* Semantic text underneath the converging animated title */}
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
@@ -309,141 +245,107 @@ const App: React.FC = () => {
             </p>
           </motion.div>
 
-          {/* Mode Switcher */}
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-50px" }}
-            transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }}
-            className="flex justify-center mb-8"
-          >
-            <div className="bg-white border border-zinc-200 rounded-full p-1 shadow-sm inline-flex">
-              <button 
-                onClick={() => setActiveTab('specialists')}
-                className={`py-2 px-6 rounded-full text-sm font-medium transition-colors ${activeTab === 'specialists' ? 'bg-zinc-900 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-900'}`}
-              >
-                Specialist Routing
-              </button>
-              <button 
-                onClick={() => setActiveTab('universal')}
-                className={`py-2 px-6 rounded-full text-sm font-medium transition-colors flex items-center space-x-2 ${activeTab === 'universal' ? 'bg-zinc-900 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-900'}`}
-              >
-                <ArrowRightLeft className="w-3.5 h-3.5" />
-                <span>Universal Format Graph</span>
-              </button>
-            </div>
-          </motion.div>
-
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: "-100px" }}
             transition={{ duration: 0.8, ease: "easeOut", delay: 0.4 }}
           >
-            <AnimatePresence mode="wait">
-              {activeTab === 'specialists' ? (
-                <motion.div 
-                  key="specialists"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                >
-                  {/* Drag & Drop Area */}
-                  <div className="mb-16 shadow-2xl shadow-zinc-200/50">
-                    <DropZone onFilesDropped={processFiles} acceptAllFiles={true} />
-                  </div>
-
-                {/* Results List */}
-                {files.length > 0 && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-                  >
-                    <div className="flex items-center justify-between mb-6 border-b border-zinc-200 pb-4">
-                      <h3 className="text-lg font-serif font-medium text-zinc-900">Processed Files ({files.length})</h3>
-                      
-                      <div className="flex items-center space-x-4">
-                        {files.some(f => f.status === ConversionStatus.COMPLETED) && (
-                          <>
-                            <button 
-                              onClick={handleCopyAll}
-                              className="flex items-center space-x-1.5 text-xs text-zinc-600 hover:text-zinc-900 transition-colors font-medium"
-                            >
-                              {copiedAll ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                              <span>{copiedAll ? 'Copied' : 'Copy All'}</span>
-                            </button>
-                            <button 
-                              onClick={handleDownloadAll}
-                              className="flex items-center space-x-1.5 text-xs bg-zinc-900 hover:bg-zinc-800 text-white px-4 py-2 rounded-sm transition-colors font-medium"
-                            >
-                              <Download className="w-3.5 h-3.5" />
-                              <span>Download Merged</span>
-                            </button>
-                          </>
-                        )}
-                        <div className="w-px h-4 bg-zinc-300 mx-1"></div>
-                        <button 
-                          onClick={clearAll}
-                          className="text-xs text-zinc-400 hover:text-red-600 transition-colors uppercase tracking-widest font-semibold"
-                        >
-                          Clear
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="space-y-3">
-                      {files.map(file => (
-                        <FileItem 
-                          key={file.id} 
-                          file={file} 
-                          onRemove={removeFile} 
-                          onProcess={handleProcessFile}
-                          onAnalyze={handleAnalyzeFile}
-                          onCinematic={setCinematicFileId} 
-                        />
-                      ))}
-                    </div>
-                  </motion.div>
-                )}
-              </motion.div>
-            ) : (
-              <motion.div
-                key="universal"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-              >
-                <div className="mb-4">
-                  <p className="text-sm tracking-wide text-zinc-500 text-center font-medium bg-gradient-to-r from-pink-500/10 via-teal-500/10 to-amber-500/10 p-4 border border-zinc-200/50 rounded-lg inline-block w-full">
-                    The Universal Constructor utilizes Dijkstra's pathfinding algorithm to route exotic or cross-system media formats through multi-step handler conversions automatically.
-                  </p>
-                </div>
-                <UniversalConverter 
-                  onConverted={(filename, buffer) => {
-                    const blob = new Blob([buffer]);
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = filename;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    setTimeout(() => URL.revokeObjectURL(url), 100);
-                  }}
-                />
-              </motion.div>
+            {/* Drag & Drop Area - Available if no active ingestion is blocking */}
+            {files.every(f => f.status !== ConversionStatus.ANALYZING_INGESTION) && (
+              <div className="mb-16 shadow-2xl shadow-zinc-200/50">
+                <DropZone onFilesDropped={processFiles} acceptAllFiles={true} />
+              </div>
             )}
-          </AnimatePresence>
-        </motion.div>
-      </div>
-      </main>
+
+            {/* Ingestion Engine and Results List */}
+            <div className="space-y-12">
+              <AnimatePresence mode="popLayout">
+                {files.map(file => {
+                  if (file.status === ConversionStatus.ANALYZING_INGESTION) {
+                    return (
+                      <motion.div 
+                        key={file.id}
+                        initial={{ opacity: 0, y: 30 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -30 }}
+                        className="w-full"
+                      >
+                        <IngestionEngine 
+                          file={file} 
+                          onExecuteSpecialist={handleProcessFile} 
+                          onExecuteUniversal={async (id, name, buf) => {
+                            setFiles(curr => curr.map(f => f.id === id ? {
+                              ...f,
+                              status: ConversionStatus.COMPLETED,
+                              content: 'Universal Binary Object generated.',
+                              markdownName: name,
+                              pdfUrl: URL.createObjectURL(new Blob([buf]))
+                            } : f));
+                          }} 
+                        />
+                      </motion.div>
+                    );
+                  }
+                  
+                  return (
+                    <motion.div 
+                      key={file.id}
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      transition={{ duration: 0.4 }}
+                    >
+                      <FileItem 
+                        file={file} 
+                        onRemove={removeFile} 
+                        onProcess={handleProcessFile}
+                        onAnalyze={handleAnalyzeFile}
+                        onCinematic={setCinematicFileId} 
+                      />
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
+            </div>
+            
+            {files.some(f => f.status === ConversionStatus.COMPLETED) && (
+              <div className="mt-8 pt-6 border-t border-zinc-200 flex justify-between items-center">
+                 <button 
+                  onClick={handleCopyAll}
+                  className="flex items-center space-x-1.5 text-sm text-zinc-600 hover:text-zinc-900 transition-colors font-medium"
+                >
+                  {copiedAll ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  <span>{copiedAll ? 'Copied' : 'Copy All Content'}</span>
+                </button>
+                <div className="flex space-x-4">
+                  <button 
+                    onClick={clearAll}
+                    className="text-sm text-zinc-500 hover:text-red-600 transition-colors font-medium"
+                  >
+                    Clear All
+                  </button>
+                  <button 
+                    onClick={handleDownloadAll}
+                    className="flex items-center space-x-1.5 text-sm bg-zinc-900 hover:bg-zinc-800 text-white px-5 py-2 rounded-lg transition-colors font-medium shadow-md"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Download Merged</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        </div >
+      </main >
       
       {/* Footer */}
-      <footer className="py-8 text-center text-zinc-400 text-xs tracking-widest uppercase border-t border-zinc-200">
+      <footer className="py-8 text-center text-zinc-400 text-xs tracking-widest uppercase border-t border-zinc-200/50">
         <p>Pure Client-Side Processing • 2026</p>
       </footer>
-    </div>
+        </>
+      )}
+    </motion.div>
   );
 };
 
