@@ -4,20 +4,18 @@
  * This is the ONLY place the real GEMINI_API_KEY ever lives.
  * The SPA never sees it.
  *
- * HARDENED v1:
- * - CORS restricted to ALLOWED_ORIGINS (env, comma-separated)
- * - Simple per-IP rate limiter (30 req / 60s window)
- * - Early 413 on payloads > 2 MB
- * - Safer error responses (never leak key or raw stack in prod path)
+ * HARDENED v1 (post-review):
+ * - CORS restricted to ALLOWED_ORIGINS (env). Disallowed origins get explicit 403 (no reflection).
+ * - Simple per-IP rate limiter using cf-connecting-ip primarily + bounded map (MAX 1000 entries, oldest eviction).
+ * - Dual size enforcement: header fast-path + actual ArrayBuffer byteLength check (defeats spoofed/missing Content-Length).
+ * - Safer error responses + server-side logging only (no raw upstream errors or key leakage to clients).
  *
  * Deploy:
  *   cd worker
  *   wrangler login
- *   wrangler secret put GEMINI_API_KEY   # paste your real key here
- *   wrangler secret put ALLOWED_ORIGINS "https://your-spa-domain.com,http://localhost:3000"
+ *   wrangler secret put GEMINI_API_KEY
+ *   wrangler secret put ALLOWED_ORIGINS "https://your-spa.example.com,http://localhost:3000,http://localhost:8787"
  *   wrangler deploy
- *
- * Then set VITE_GEMINI_PROXY_URL to the returned *.workers.dev URL.
  */
 
 export interface Env {
@@ -44,7 +42,8 @@ function getAllowedOrigins(env: Env): string[] {
 }
 
 function corsHeaders(origin: string | null, allowed: string[]): Record<string, string> {
-  const allow = origin && allowed.includes(origin) ? origin : allowed[0] || '*';
+  // Only reflect an allowed origin. Never '*' or a fallback when the caller supplied a disallowed one.
+  const allow = origin && allowed.includes(origin) ? origin : allowed[0];
   return {
     'Access-Control-Allow-Origin': allow,
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -52,13 +51,32 @@ function corsHeaders(origin: string | null, allowed: string[]): Record<string, s
   };
 }
 
-// Very simple in-memory rate limiter (resets on Worker restart – sufficient for v1)
+// Bounded in-memory rate limiter (resets on Worker restart – sufficient for v1)
 const rateMap = new Map<string, { count: number; reset: number }>(); 
 const RATE_LIMIT = 30;
 const WINDOW_MS = 60_000;
+const MAX_RATE_ENTRIES = 1000; // prevent unbounded memory growth from spoofed IPs
+
+function getClientIp(request: Request): string {
+  // Prefer Cloudflare's reliable header; fall back safely.
+  const cf = request.headers.get('cf-connecting-ip');
+  if (cf) return cf.trim();
+  const xff = request.headers.get('x-forwarded-for');
+  if (xff) return xff.split(',')[0].trim();
+  return 'unknown';
+}
 
 function checkRateLimit(ip: string): boolean {
   const now = Date.now();
+
+  // Simple eviction: drop the oldest tracked IP when we hit the cap
+  if (rateMap.size >= MAX_RATE_ENTRIES) {
+    const oldest = rateMap.keys().next().value as string | undefined;
+    if (oldest !== undefined) {
+      rateMap.delete(oldest);
+    }
+  }
+
   let entry = rateMap.get(ip);
   if (!entry || now > entry.reset) {
     entry = { count: 0, reset: now + WINDOW_MS };
@@ -118,7 +136,6 @@ CRITICAL: Include the entire informational payload.`;
 
 CRITICAL: Ensure the output matches the requested format precisely. Output the ENTIRE transformed document comprehensively.`;
   } else {
-    // default / markdown_raw etc. – just return clean content
     return content;
   }
 
@@ -157,6 +174,8 @@ async function callGemini(prompt: string, model: string, apiKey: string, isJson 
 
   if (!res.ok) {
     const errText = await res.text().catch(() => '');
+    // Log details server-side only for debugging; never expose raw upstream errors to clients
+    console.error('Gemini API error response:', res.status, errText);
     throw new Error(`Gemini API error ${res.status}`);
   }
 
@@ -169,17 +188,43 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const origin = request.headers.get('Origin');
-    const ip = request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || 'unknown';
+    const ip = getClientIp(request);
     const allowed = getAllowedOrigins(env);
 
+    // CORS preflight
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders(origin, allowed) });
     }
 
     if (url.pathname === '/gemini' && request.method === 'POST') {
-      // Early size guard (fail fast before JSON parse)
+      // Hard security boundary: explicitly reject disallowed origins with 403 (no reflection)
+      if (origin && !allowed.includes(origin)) {
+        return new Response(JSON.stringify({ error: 'Origin not allowed' }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Fast header check (cheap)
       const len = parseInt(request.headers.get('content-length') || '0', 10);
       if (len > 2_000_000) {
+        return new Response(JSON.stringify({ error: 'Payload too large' }), {
+          status: 413,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders(origin, allowed) },
+        });
+      }
+
+      // Actual body size enforcement (defeats missing/spoofed Content-Length)
+      let bodyBuf: ArrayBuffer;
+      try {
+        bodyBuf = await request.arrayBuffer();
+      } catch {
+        return new Response(JSON.stringify({ error: 'Invalid request body' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders(origin, allowed) },
+        });
+      }
+      if (bodyBuf.byteLength > 2_000_000) {
         return new Response(JSON.stringify({ error: 'Payload too large' }), {
           status: 413,
           headers: { 'Content-Type': 'application/json', ...corsHeaders(origin, allowed) },
@@ -194,7 +239,8 @@ export default {
       }
 
       try {
-        const req = (await request.json()) as ProxyRequest;
+        const text = new TextDecoder().decode(bodyBuf);
+        const req = JSON.parse(text) as ProxyRequest;
 
         if (!req.content || !req.fileName) {
           return new Response(JSON.stringify({ error: 'Missing content or fileName' }), {
