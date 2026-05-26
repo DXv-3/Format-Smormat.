@@ -9,16 +9,17 @@ interface IngestionEngineProps {
   file: ProcessedFile;
   onExecuteSpecialist: (id: string, action: string, customInstruction?: string) => void;
   onExecuteUniversal: (id: string, extOut: string, buf: Uint8Array) => void;
+  onAnalyze: (id: string) => void;
 }
 
-export const IngestionEngine: React.FC<IngestionEngineProps> = ({ file, onExecuteSpecialist, onExecuteUniversal }) => {
-  const [phase, setPhase] = useState<'analyzing' | 'gameplan'>('gameplan');
+export const IngestionEngine: React.FC<IngestionEngineProps> = ({ file, onExecuteSpecialist, onExecuteUniversal, onAnalyze }) => {
+  const [phase, setPhase] = useState<'analyzing' | 'gameplan'>('analyzing');
   const [analysisSteps, setAnalysisSteps] = useState<string[]>([]);
   const [showUniversal, setShowUniversal] = useState(false);
   const [customPrompt, setCustomPrompt] = useState("");
 
   useEffect(() => {
-    if (phase !== 'analyzing') return;
+    onAnalyze(file.id);
 
     const steps = [
       'Deconstructing binary headers...',
@@ -42,9 +43,30 @@ export const IngestionEngine: React.FC<IngestionEngineProps> = ({ file, onExecut
 
   const getGamePlanOptions = () => {
     const ext = file.originalName.split('.').pop()?.toLowerCase();
-    
     const options = [];
     
+    // Dynamic Analysis-based options
+    if (file.aiMetadata) {
+      if (file.aiMetadata.documentType === 'Invoice') {
+        options.push({
+          id: 'extract_financials',
+          icon: <Binary className="w-5 h-5" />,
+          title: 'Extract Financial Schema',
+          desc: 'Automatically map line items and totals to structured JSON or CSV.',
+          color: 'teal'
+        });
+      }
+      if (file.aiMetadata.sentiment === 'Negative') {
+        options.push({
+          id: 'tone_neutralizer',
+          icon: <BrainCircuit className="w-5 h-5" />,
+          title: 'Neutralize Tone',
+          desc: 'Rewrite document content to be formal and neutral.',
+          color: 'indigo'
+        });
+      }
+    }
+
     if (ext === 'pdf') {
       options.push({
         id: 'pdf_fillable',

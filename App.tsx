@@ -31,6 +31,9 @@ const App: React.FC = () => {
     ['#F9F9F7', '#F9F9F7', '#eef2f3', '#e0e5ec']
   );
 
+  const dragDropOpacity = useTransform(scrollYProgress, [0.4, 0.6], [0, 1]);
+  const dragDropY = useTransform(scrollYProgress, [0.4, 0.6], [100, 0]);
+
   useEffect(() => {
     bootstrapFormatRouter();
     conversionGraph.initAllSupported();
@@ -246,10 +249,10 @@ const App: React.FC = () => {
           </motion.div>
 
           <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-100px" }}
-            transition={{ duration: 0.8, ease: "easeOut", delay: 0.4 }}
+            style={{ 
+              opacity: dragDropOpacity,
+              y: dragDropY,
+            }}
           >
             {/* Drag & Drop Area - Available if no active ingestion is blocking */}
             {files.every(f => f.status !== ConversionStatus.ANALYZING_INGESTION) && (
@@ -274,6 +277,7 @@ const App: React.FC = () => {
                         <IngestionEngine 
                           file={file} 
                           onExecuteSpecialist={handleProcessFile} 
+                          onAnalyze={handleAnalyzeFile}
                           onExecuteUniversal={async (id, name, buf) => {
                             setFiles(curr => curr.map(f => f.id === id ? {
                               ...f,

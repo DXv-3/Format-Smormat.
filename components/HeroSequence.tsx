@@ -61,13 +61,13 @@ const ParallaxLetter: React.FC<{
         onMouseLeave={() => setIsHovered(false)}
         style={{
           WebkitTextStroke: '2px #18181b',
-          color: 'transparent',
-          backgroundImage: 'linear-gradient(to top, #ec4899 0%, #14b8a6 25%, #f59e0b 50%, #18181b 50%, #18181b 100%)',
+          color: isHovered ? 'transparent' : '#18181b',
+          backgroundImage: 'linear-gradient(to top, #ec4899, #14b8a6, #f59e0b)',
           backgroundSize: '100% 200%',
           backgroundPosition: isHovered ? '0% 100%' : '0% 0%',
           WebkitBackgroundClip: 'text',
           backgroundClip: 'text',
-          transition: 'background-position 0.6s cubic-bezier(0.22, 1, 0.36, 1)'
+          transition: 'background-position 1.2s cubic-bezier(0.2, 0.8, 0.2, 1), color 0.3s'
         }}
       >
         <motion.span 
