@@ -1,10 +1,9 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Github, FileDiff, Download, Copy, Check, Menu, X, ArrowRightLeft } from 'lucide-react';
+import React, { useCallback, useEffect } from 'react';
+import { FileDiff, Download, Copy, Check, Menu, X } from 'lucide-react';
 import DropZone from './components/DropZone';
 import FileItem from './components/FileItem';
-import { UniversalConverter } from './components/UniversalConverter';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
-import { ProcessedFile, ConversionStatus } from './types';
+import { ConversionStatus } from './types';
 import { processUniversalFile } from './services/converter';
 import { extractDocumentMetadata } from './services/ai';
 import { conversionGraph } from './lib/format-router/graph';
@@ -14,16 +13,27 @@ import { CinematicTransformationView } from './components/CinematicTransformatio
 import { Preloader } from './components/Preloader';
 import { HeroSequence } from './components/HeroSequence';
 import { IngestionEngine } from './components/IngestionEngine';
+import { useFileStore } from './src/stores/useFileStore';
 
 const App: React.FC = () => {
-  const [files, setFiles] = useState<ProcessedFile[]>([]);
-  const [copiedAll, setCopiedAll] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [cinematicFileId, setCinematicFileId] = useState<string | null>(null);
-  const [appReady, setAppReady] = useState(false);
+  const {
+    files,
+    copiedAll,
+    menuOpen,
+    cinematicFileId,
+    appReady,
+    setCopiedAll,
+    setMenuOpen,
+    setCinematicFileId,
+    setAppReady,
+    addFiles,
+    removeFile,
+    clearAll,
+    generateMergedContent,
+    updateFile
+  } = useFileStore();
 
   // Re-introducing scroll controls for the arc sequence
-  const heroRef = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll();
   const appBgColor = useTransform(
     scrollYProgress,
@@ -39,89 +49,46 @@ const App: React.FC = () => {
     conversionGraph.initAllSupported();
   }, []);
 
-  const processFiles = useCallback((incomingFiles: File[]) => {
-    const newEntries: ProcessedFile[] = incomingFiles.map(file => ({
-      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
-      originalName: file.name,
-      markdownName: file.name,
-      content: '',
-      originalSize: file.size,
-      status: ConversionStatus.ANALYZING_INGESTION,
-      timestamp: Date.now(),
-      rawFile: file
-    }));
-
-    setFiles(prev => [...newEntries, ...prev]);
-  }, []);
-
   const handleProcessFile = useCallback(async (id: string, action: string, customInstruction?: string) => {
     const fileEntry = files.find(f => f.id === id);
     if (!fileEntry || !fileEntry.rawFile) return;
 
-    // Optimistic update
-    setFiles(current => current.map(f => f.id === id ? { ...f, status: ConversionStatus.PROCESSING, performedAction: action } : f));
+    updateFile(id, { status: ConversionStatus.PROCESSING, performedAction: action });
     
     try {
       const result = await processUniversalFile(fileEntry.rawFile, action, customInstruction);
-      setFiles(inner => inner.map(f => f.id === id ? { 
-        ...f, 
+      updateFile(id, { 
         status: ConversionStatus.COMPLETED,
         content: result.markdown || '',
-        markdownName: result.smartName || f.originalName,
+        markdownName: result.smartName || fileEntry.originalName,
         pdfUrl: result.pdfUrl,
         images: result.images,
         fillablePdfUrl: result.fillablePdfUrl
-      } : f));
+      });
     } catch (err) {
       console.error(err);
-      setFiles(inner => inner.map(f => f.id === id ? { ...f, status: ConversionStatus.ERROR, errorMessage: 'Processing failed' } : f));
+      updateFile(id, { status: ConversionStatus.ERROR, errorMessage: 'Processing failed' });
     }
-  }, [files]);
+  }, [files, updateFile]);
 
   const handleAnalyzeFile = useCallback((id: string) => {
     const fileEntry = files.find(f => f.id === id);
     if (!fileEntry || !fileEntry.content) return;
 
-    setFiles(current => current.map(f => f.id === id ? { ...f, aiStatus: 'ANALYZING' as any } : f));
+    updateFile(id, { aiStatus: 'ANALYZING' as any });
 
     extractDocumentMetadata(fileEntry.content, fileEntry.originalName).then(metadata => {
-      setFiles(inner => inner.map(f => f.id === id ? { ...f, aiStatus: 'COMPLETED' as any, aiMetadata: metadata } : f));
+      updateFile(id, { aiStatus: 'COMPLETED' as any, aiMetadata: metadata });
     }).catch(err => {
       console.error(err);
-      setFiles(inner => inner.map(f => f.id === id ? { ...f, aiStatus: 'ERROR' as any } : f));
+      updateFile(id, { aiStatus: 'ERROR' as any });
     });
-  }, [files]);
+  }, [files, updateFile]);
 
-  const removeFile = useCallback((id: string) => {
-    setFiles(prev => {
-      const fileToRemove = prev.find(f => f.id === id);
-      if (fileToRemove) {
-        if (fileToRemove.pdfUrl) URL.revokeObjectURL(fileToRemove.pdfUrl);
-        if (fileToRemove.fillablePdfUrl) URL.revokeObjectURL(fileToRemove.fillablePdfUrl);
-      }
-      return prev.filter(f => f.id !== id);
-    });
-  }, []);
-
-  const clearAll = () => {
+  const handleClearAll = () => {
     if (confirm('Are you sure you want to clear all converted files?')) {
-      files.forEach(f => {
-        if (f.pdfUrl) URL.revokeObjectURL(f.pdfUrl);
-        if (f.fillablePdfUrl) URL.revokeObjectURL(f.fillablePdfUrl);
-      });
-      setFiles([]);
+      clearAll();
     }
-  };
-
-  const generateMergedContent = () => {
-    const completedFiles = files.filter(f => f.status === ConversionStatus.COMPLETED);
-    if (completedFiles.length === 0) return '';
-
-    let mergedContent = `# Merged Output\n\n`;
-    completedFiles.forEach(file => {
-      mergedContent += `## Source: ${file.originalName}\n\n${file.content}\n\n---\n\n`;
-    });
-    return mergedContent;
   };
 
   const handleDownloadAll = () => {
@@ -257,7 +224,7 @@ const App: React.FC = () => {
             {/* Drag & Drop Area - Available if no active ingestion is blocking */}
             {files.every(f => f.status !== ConversionStatus.ANALYZING_INGESTION) && (
               <div className="mb-16 shadow-2xl shadow-zinc-200/50">
-                <DropZone onFilesDropped={processFiles} acceptAllFiles={true} />
+                <DropZone onFilesDropped={addFiles} acceptAllFiles={true} />
               </div>
             )}
 
@@ -279,13 +246,12 @@ const App: React.FC = () => {
                           onExecuteSpecialist={handleProcessFile} 
                           onAnalyze={handleAnalyzeFile}
                           onExecuteUniversal={async (id, name, buf) => {
-                            setFiles(curr => curr.map(f => f.id === id ? {
-                              ...f,
+                            updateFile(id, {
                               status: ConversionStatus.COMPLETED,
                               content: 'Universal Binary Object generated.',
                               markdownName: name,
                               pdfUrl: URL.createObjectURL(new Blob([buf]))
-                            } : f));
+                            });
                           }} 
                         />
                       </motion.div>
@@ -324,7 +290,7 @@ const App: React.FC = () => {
                 </button>
                 <div className="flex space-x-4">
                   <button 
-                    onClick={clearAll}
+                    onClick={handleClearAll}
                     className="text-sm text-zinc-500 hover:text-red-600 transition-colors font-medium"
                   >
                     Clear All

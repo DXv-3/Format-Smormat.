@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ProcessedFile, ConversionStatus } from '../types';
+import { ProcessedFile } from '../types';
 import { Network, Zap, Binary, Workflow, CheckCircle, BrainCircuit } from 'lucide-react';
 import { conversionGraph } from '../lib/format-router/graph';
 import { UniversalConverter } from './UniversalConverter';
@@ -30,7 +30,12 @@ export const IngestionEngine: React.FC<IngestionEngineProps> = ({ file, onExecut
 
     let stepIndex = 0;
     const interval = setInterval(() => {
-      setAnalysisSteps(prev => [...prev, steps[stepIndex]]);
+      setAnalysisSteps(prev => {
+        if (prev.length <= steps.length) {
+          return [...prev, steps[stepIndex]];
+        }
+        return prev;
+      });
       stepIndex++;
       if (stepIndex === steps.length) {
         clearInterval(interval);
@@ -39,7 +44,7 @@ export const IngestionEngine: React.FC<IngestionEngineProps> = ({ file, onExecut
     }, 50);
 
     return () => clearInterval(interval);
-  }, [phase]);
+  }, [file.id, onAnalyze]);
 
   const getGamePlanOptions = () => {
     const ext = file.originalName.split('.').pop()?.toLowerCase();
@@ -274,7 +279,7 @@ export const IngestionEngine: React.FC<IngestionEngineProps> = ({ file, onExecut
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {gamePlanOptions.map((opt, i) => (
+              {gamePlanOptions.map((opt) => (
                 <div key={opt.id} className="flex flex-col space-y-2">
                   <button 
                     onClick={() => onExecuteSpecialist(file.id, opt.id, customPrompt)}

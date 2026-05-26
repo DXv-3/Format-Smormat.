@@ -1,4 +1,4 @@
-import { FormatDef, ConversionPath, ConversionStep } from './types';
+import { FormatDef, ConversionPath } from './types';
 
 class ConversionGraph {
   formats: Map<string, FormatDef> = new Map();
@@ -15,6 +15,7 @@ class ConversionGraph {
     };
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async runPath(buffer: Uint8Array, path: ConversionPath): Promise<Uint8Array | null> {
     // Fallback pass-through mock since original logic was lost.
     return new Uint8Array(buffer);

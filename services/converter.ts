@@ -62,7 +62,7 @@ export const convertHtmlToMarkdown = (htmlContent: string, smartExtract: boolean
     return turndownService.turndown(contentToConvert);
   } catch (error) {
     console.error("Conversion failed:", error);
-    throw new Error("Failed to parse HTML content.");
+    throw new Error("Failed to parse HTML content.", { cause: error });
   }
 };
 
@@ -72,7 +72,7 @@ export const convertJsonToMarkdown = (jsonContent: string): string => {
     return jsonToMarkdownRecursive(data);
   } catch (error) {
     console.error("JSON Conversion failed:", error);
-    throw new Error("Failed to parse JSON content.");
+    throw new Error("Failed to parse JSON content.", { cause: error });
   }
 };
 
@@ -115,7 +115,7 @@ export const getSmartFilename = (originalName: string, content: string): string 
         const data = JSON.parse(content);
         if (data.title && typeof data.title === 'string') baseName = data.title;
         else if (data.name && typeof data.name === 'string') baseName = data.name;
-      } catch (e) {
+      } catch {
         // invalid json, ignore
       }
     } else if (originalName.toLowerCase().endsWith('.html') || originalName.toLowerCase().endsWith('.htm')) {
@@ -140,7 +140,7 @@ export const getSmartFilename = (originalName: string, content: string): string 
     if (!baseName) baseName = 'untitled';
 
     return `${baseName}.md`;
-  } catch (e) {
+  } catch {
     // Fallback in case of error
     const nameWithoutExt = originalName.substring(0, originalName.lastIndexOf('.')) || originalName;
     return `${nameWithoutExt}.md`;
@@ -170,10 +170,10 @@ import { runAiTransformation } from './ai';
 export const processUniversalFile = async (file: File, action: string = 'markdown_raw', customInstruction?: string): Promise<{ markdown?: string, smartName: string, pdfUrl?: string, images?: string[], fillablePdfUrl?: string }> => {
   const name = file.name.toLowerCase();
   let smartName = getSmartFilename(file.name, "");
-  let extractedMarkdown = "";
+  let extractedMarkdown: string;
   let pdfUrl: string | undefined;
   let fillablePdfUrl: string | undefined;
-  let images: string[] = [];
+  const images: string[] = [];
   
   // Decide what local action to use if the user actually requested an AI transformation
   const localAction = action.startsWith('ai_') ? 'markdown_raw' : action;
@@ -261,7 +261,7 @@ export const processUniversalFile = async (file: File, action: string = 'markdow
         
         const html2pdfModule = await import('html2pdf.js');
         const html2pdf = html2pdfModule.default || html2pdfModule;
-        const pdfBlob = await html2pdf().set(opt).from(container).output('blob');
+        const pdfBlob = await (html2pdf as any)().set(opt).from(container).output('blob');
         pdfUrl = URL.createObjectURL(pdfBlob);
       } catch (err) {
         console.error("Failed to generate PDF:", err);
@@ -276,6 +276,7 @@ export const processUniversalFile = async (file: File, action: string = 'markdow
   else if (name.endsWith('.pdf')) {
     const buffer = await readFileAsArrayBuffer(file);
     const pdfjsLib = await import('pdfjs-dist');
+    // @ts-expect-error vite specific query string
     const pdfWorkerUrl = (await import('pdfjs-dist/build/pdf.worker.mjs?url')).default;
     pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -292,7 +293,7 @@ export const processUniversalFile = async (file: File, action: string = 'markdow
         if (context) {
           canvas.height = viewport.height;
           canvas.width = viewport.width;
-          await page.render({ canvasContext: context, viewport }).promise;
+          await page.render({ canvasContext: context, viewport } as any).promise;
           images.push(canvas.toDataURL('image/png'));
         }
       }
@@ -328,7 +329,9 @@ export const processUniversalFile = async (file: File, action: string = 'markdow
                   borderWidth: 1,
                 });
                 createdFillable = true;
-              } catch (err) {}
+              } catch {
+                // ignore gracefully 
+              }
             }
           });
         }

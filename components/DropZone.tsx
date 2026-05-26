@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useEffect } from 'react';
-import { Upload, FileCode, FileWarning, FileText, Image as ImageIcon, Archive, Edit3 } from 'lucide-react';
+import { Upload, FileWarning, FileText, Image as ImageIcon, Archive, Edit3 } from 'lucide-react';
 
 const MorphingTitle: React.FC<{ text: string }> = ({ text }) => {
   const [fonts, setFonts] = useState<string[]>(Array(text.length).fill('font-sans'));

@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { ArrowRight, Settings2, Download, Check, AlertCircle, X, Search, Upload } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Settings2, AlertCircle, X, Search, Upload } from 'lucide-react';
 import { conversionGraph } from '../lib/format-router/graph';
-import { FormatDef } from '../lib/format-router/types';
 
 interface UniversalConverterProps {
   onConverted: (filename: string, bin: Uint8Array) => void;
@@ -14,7 +13,6 @@ export const UniversalConverter: React.FC<UniversalConverterProps> = ({ onConver
   const [outFormat, setOutFormat] = useState<string>('');
   
   const [isProcessing, setIsProcessing] = useState(false);
-  const [searchIn, setSearchIn] = useState('');
   const [searchOut, setSearchOut] = useState('');
   
   const [progressMsg, setProgressMsg] = useState('');
@@ -57,13 +55,13 @@ export const UniversalConverter: React.FC<UniversalConverterProps> = ({ onConver
     }
   };
 
-  const handlePaste = (e: ClipboardEvent) => {
-    if (e.clipboardData?.files.length) {
-      handleNewFile(e.clipboardData.files[0]);
-    }
-  };
-
   useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      if (e.clipboardData?.files.length) {
+        handleNewFile(e.clipboardData.files[0]);
+      }
+    };
+    
     document.addEventListener('paste', handlePaste);
     if (initialFile) {
       handleNewFile(initialFile);
@@ -105,7 +103,7 @@ export const UniversalConverter: React.FC<UniversalConverterProps> = ({ onConver
             winningPath = path;
             break;
           }
-        } catch (e) {
+        } catch {
           // Log and continue to next path
           console.warn(`Path failed, trying next...`);
         }

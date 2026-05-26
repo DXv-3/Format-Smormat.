@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Check, Download, FileText, ChevronDown, ChevronUp, Trash2, FileType, Image as ImageIcon, Edit3, Sparkles } from 'lucide-react';
 import { ProcessedFile, ConversionStatus } from '../types';
-import JSZip from 'jszip';
 import DotLoader from './DotLoader';
+import { downloadMarkdown, downloadPdf, downloadFillablePdf, downloadImages } from './file/downloadUtils';
 
 interface FileItemProps {
   file: ProcessedFile;
@@ -17,17 +17,22 @@ const FileItem: React.FC<FileItemProps> = React.memo(({ file, onRemove, onProces
   const [expanded, setExpanded] = useState(false);
   const [showFullMarkdown, setShowFullMarkdown] = useState(false);
 
-  // Cleanup object URLs when the file is removed or component unmounted to prevent memory leaks
   useEffect(() => {
     return () => {
-      // NOTE: We don't revoke here because the parent App manages the state and might
-      // re-render FileItem independently. However, a better pattern is to clean up
-      // in the parent when it actually removes the file from the array.
-      // E.g., `App.tsx -> removeFile()` should handle the URL revoke.
     };
   }, []);
 
-const ActionButton = ({ onClick, disabled, className, title, icon: Icon, children, isProcessing }) => (
+interface ActionButtonProps {
+  onClick: () => void;
+  disabled?: boolean;
+  className?: string;
+  title?: string;
+  icon: any;
+  children: React.ReactNode;
+  isProcessing?: boolean;
+}
+
+const ActionButton: React.FC<ActionButtonProps> = ({ onClick, disabled, className, title, icon: Icon, children, isProcessing }) => (
   <motion.button 
     whileHover={{ scale: 1.02 }}
     whileTap={{ scale: 0.98 }}
@@ -58,68 +63,10 @@ const ActionButton = ({ onClick, disabled, className, title, icon: Icon, childre
     }
   }, [file.aiStatus, expanded]);
 
-  const handleDownload = () => {
-    const blob = new Blob([file.content], { type: 'text/markdown;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = file.markdownName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const handleDownloadPdf = () => {
-    if (!file.pdfUrl) return;
-    const a = document.createElement('a');
-    a.href = file.pdfUrl;
-    a.download = file.originalName.replace(/\.docx$/i, '.pdf');
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  };
-
-  const handleDownloadFillable = () => {
-    if (!file.fillablePdfUrl) return;
-    const a = document.createElement('a');
-    a.href = file.fillablePdfUrl;
-    a.download = `Fillable_${file.originalName.replace(/\.pdf$/i, '.pdf')}`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  };
-
-  const handleDownloadPngs = async () => {
-    if (!file.images || file.images.length === 0) return;
-    
-    if (file.images.length === 1) {
-      const a = document.createElement('a');
-      a.href = file.images[0];
-      a.download = file.originalName.replace(/\.pdf$/i, '.png');
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    } else {
-      const zip = new JSZip();
-      const baseName = file.originalName.replace(/\.pdf$/i, '');
-      
-      file.images.forEach((dataUrl, index) => {
-        const base64Data = dataUrl.split(',')[1];
-        zip.file(`${baseName}_page_${index + 1}.png`, base64Data, { base64: true });
-      });
-      
-      const content = await zip.generateAsync({ type: 'blob' });
-      const url = URL.createObjectURL(content);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${baseName}_images.zip`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }
-  };
+  const handleDownload = () => downloadMarkdown(file.content, file.markdownName);
+  const handleDownloadPdf = () => { if (file.pdfUrl) downloadPdf(file.pdfUrl, file.originalName); };
+  const handleDownloadFillable = () => { if (file.fillablePdfUrl) downloadFillablePdf(file.fillablePdfUrl, file.originalName); };
+  const handleDownloadPngs = () => { if (file.images) downloadImages(file.images, file.originalName); };
 
   const formatSize = (bytes: number) => {
     if (bytes === 0) return '0 B';
