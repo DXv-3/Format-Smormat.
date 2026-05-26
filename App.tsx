@@ -14,10 +14,9 @@ import { CinematicTransformationView } from './components/CinematicTransformatio
 import { Preloader } from './components/Preloader';
 import { HeroSequence } from './components/HeroSequence';
 import { IngestionEngine } from './components/IngestionEngine';
-import { useFileStore } from './src/stores/useFileStore';
+import { useFileStore } from '@/src/stores/useFileStore';
 
 const App: React.FC = () => {
-  // Global file state now lives in Zustand (first refactor slice)
   const {
     files,
     copiedAll,
@@ -36,7 +35,6 @@ const App: React.FC = () => {
     generateMergedContent,
   } = useFileStore();
 
-  // Scroll transforms for the arc sequence (kept in App — pure UI/animation)
   const heroRef = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll();
   const appBgColor = useTransform(
@@ -53,8 +51,6 @@ const App: React.FC = () => {
     conversionGraph.initAllSupported();
   }, []);
 
-  // Thin wrappers for async processing — call store.updateFile after work.
-  // (Later slices can move these into hooks + TanStack Query)
   const handleProcessFile = async (id: string, action: string, customInstruction?: string) => {
     const fileEntry = files.find(f => f.id === id);
     if (!fileEntry || !fileEntry.rawFile) return;
@@ -81,15 +77,16 @@ const App: React.FC = () => {
     const fileEntry = files.find(f => f.id === id);
     if (!fileEntry || !fileEntry.content) return;
 
-    updateFile(id, { aiStatus: 'ANALYZING' as any });
+    // Use the union type from ProcessedFile instead of 'as any'
+    updateFile(id, { aiStatus: 'ANALYZING' });
 
     extractDocumentMetadata(fileEntry.content, fileEntry.originalName)
       .then(metadata => {
-        updateFile(id, { aiStatus: 'COMPLETED' as any, aiMetadata: metadata });
+        updateFile(id, { aiStatus: 'COMPLETED', aiMetadata: metadata });
       })
       .catch(err => {
         console.error(err);
-        updateFile(id, { aiStatus: 'ERROR' as any });
+        updateFile(id, { aiStatus: 'ERROR' });
       });
   };
 
