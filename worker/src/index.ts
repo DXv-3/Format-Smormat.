@@ -1,0 +1,195 @@
+/**
+ * Cloudflare Worker – Secure Gemini Proxy for Format-Smormat
+ *
+ * This is the ONLY place the real GEMINI_API_KEY ever lives.
+ * The SPA never sees it.
+ *
+ * Deploy:
+ *   cd worker
+ *   wrangler login
+ *   wrangler secret put GEMINI_API_KEY   # paste your real key here
+ *   wrangler deploy
+ *
+ * Then set VITE_GEMINI_PROXY_URL to the returned *.workers.dev URL
+ * in your hosting platform (or .env.local for local dev).
+ */
+
+export interface Env {
+  GEMINI_API_KEY: string;
+}
+
+interface ProxyRequest {
+  mode: 'transform' | 'metadata';
+  action?: string;
+  customInstruction?: string;
+  fileName: string;
+  content: string;
+}
+
+const GEMINI_REST = 'https://generativelanguage.googleapis.com/v1beta';
+
+function corsHeaders() {
+  return {
+    'Access-Control-Allow-Origin': '*', // tighten in production if you want
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  };
+}
+
+function buildTransformPrompt(req: ProxyRequest): string {
+  const { action = 'markdown_raw', customInstruction, fileName, content } = req;
+
+  let prompt = '';
+
+  if (action === 'ai_second_brain') {
+    prompt = `You are an expert Personal Knowledge Management (PKM) assistant. Organize the following document into a pristine markdown file tailored for an Obsidian/Notion "Second Brain".
+    
+Required Format:
+1. Start with a YAML frontmatter block containing:
+   - title
+   - date
+   - tags (array)
+   - aliases (array)
+   - source_type
+2. A brief 1-paragraph summary under an "## Abstract" header.
+3. A list of 5-10 key bidirectional links (formatted as [[Topic Name]]) under "## Core Concepts".
+4. The remaining document meticulously formatted with proper Markdown headers (H2/H3), bullet points, and bolded entities for high scannability. 
+
+CRITICAL: Do NOT simply abbreviate or truncate the content. You must process and synthesize the ENTIRE document comprehensively.`;
+  } else if (action === 'ai_insights_deep') {
+    prompt = `You are a world-class strategic analyst. Analyze the following document aggressively through the specific lens or persona provided below.
+
+Your Lens/Focus/Persona:
+"${customInstruction || 'General strategic analysis'}"
+
+Instructions:
+1. Get your hands dirty. Dig into the specifics of the text relative to the lens.
+2. Identify non-obvious patterns, potential contradictions, and hidden implications.
+3. Call out specific metrics, quotes, or findings and interpret what they mean for this persona.
+4. Output your analysis in a structured, professional, and well-formatted Markdown document.
+
+CRITICAL: Be extremely comprehensive. Provide a deep, exhaustive analysis of the ENTIRE document.`;
+  } else if (action === 'ai_llm_prompt') {
+    prompt = `Restructure the following document into a high-quality "System Prompt" or Contextual Injection format optimized for an LLM to read. 
+
+Instructions:
+- Wrap the core context in clear XML tags e.g. <document_context>.
+- Isolate variables or moving parts.
+- Provide a set of clear "Rules" or "Directives" for how the receiving LLM should use this data.
+- The goal is to make this raw document easily digestible for an AI agent.
+
+CRITICAL: Include the entire informational payload.`;
+  } else if (action === 'ai_custom') {
+    prompt = `Transform the following document exactly into the following format/specification:
+
+"${customInstruction || 'Return as clean Markdown'}"
+
+CRITICAL: Ensure the output matches the requested format precisely. Output the ENTIRE transformed document comprehensively.`;
+  } else {
+    // default / markdown_raw etc. – just return clean content
+    return content;
+  }
+
+  prompt += `\n\n--- Document Name: ${fileName} ---\n\n${content.substring(0, 800000)}`;
+  return prompt;
+}
+
+function buildMetadataPrompt(fileName: string, content: string): string {
+  return `Analyze the following document and extract key metadata, a short summary, and 3-5 main topics or tags.
+
+Document Name: ${fileName}
+
+Content:
+${content.substring(0, 800000)}`;
+}
+
+async function callGemini(prompt: string, model: string, apiKey: string, isJson = false) {
+  const url = `${GEMINI_REST}/models/${model}:generateContent?key=${apiKey}`;
+
+  const body: any = {
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: {
+      maxOutputTokens: isJson ? 2048 : 8192,
+    },
+  };
+
+  if (isJson) {
+    body.generationConfig.responseMimeType = 'application/json';
+  }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`Gemini API error ${res.status}: ${errText}`);
+  }
+
+  const data: any = await res.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  return text.trim();
+}
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
+
+    // CORS preflight
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { headers: corsHeaders() });
+    }
+
+    if (url.pathname === '/gemini' && request.method === 'POST') {
+      try {
+        const req = (await request.json()) as ProxyRequest;
+
+        if (!req.content || !req.fileName) {
+          return new Response(JSON.stringify({ error: 'Missing content or fileName' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders() },
+          });
+        }
+
+        let result: any;
+
+        if (req.mode === 'metadata') {
+          const prompt = buildMetadataPrompt(req.fileName, req.content);
+          const raw = await callGemini(prompt, 'gemini-1.5-flash-latest', env.GEMINI_API_KEY, true);
+
+          // Try to parse JSON; fall back to raw text
+          try {
+            result = JSON.parse(raw.replace(/^```json\n?/, '').replace(/\n?```$/, ''));
+          } catch {
+            result = { summary: raw, documentType: 'Unknown', sentiment: 'Neutral', keyEntities: [], tags: [] };
+          }
+        } else {
+          // transform
+          const prompt = buildTransformPrompt(req);
+          // For pure passthrough actions we already returned early in buildTransformPrompt
+          if (prompt === req.content) {
+            result = req.content;
+          } else {
+            result = await callGemini(prompt, 'gemini-1.5-pro-latest', env.GEMINI_API_KEY, false);
+          }
+        }
+
+        return new Response(JSON.stringify(result), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders() },
+        });
+      } catch (err: any) {
+        console.error('Worker error:', err);
+        return new Response(JSON.stringify({ error: 'Proxy failure', message: String(err?.message || err) }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders() },
+        });
+      }
+    }
+
+    return new Response('Format-Smormat Gemini Proxy\nPOST /gemini', {
+      headers: { 'Content-Type': 'text/plain', ...corsHeaders() },
+    });
+  },
+};

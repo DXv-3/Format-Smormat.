@@ -1,0 +1,6 @@
+name = "format-smormat-gemini-proxy"
+main = "src/index.ts"
+compatibility_date = "2025-05-01"
+
+[vars]
+# Add any non-secret vars here if needed later
