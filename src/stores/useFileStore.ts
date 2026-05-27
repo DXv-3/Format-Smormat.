@@ -18,7 +18,7 @@ interface FileStore {
   setCopiedAll: (val: boolean) => void;
   setMenuOpen: (val: boolean) => void;
 
-  // Derived helpers (previously local in App)
+  // Derived helpers
   getCompletedFiles: () => ProcessedFile[];
   generateMergedContent: () => string;
 }
@@ -56,6 +56,7 @@ export const useFileStore = create<FileStore>((set, get) => ({
   },
 
   clearAll: () => {
+    // NOTE: Blocking confirm() kept for v1 compatibility. Replace with proper modal in next UI slice.
     const confirmed = confirm('Are you sure you want to clear all converted files?');
     if (!confirmed) return;
 
