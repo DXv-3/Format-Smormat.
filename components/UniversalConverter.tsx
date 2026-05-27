@@ -91,6 +91,7 @@ export const UniversalConverter: React.FC<UniversalConverterProps> = ({ onConver
       // Try paths sequentially
       let successBuf: Uint8Array | null = null;
       let winningPath = null;
+      let resultingKind = 'RAW_FILE';
 
       const buffer = new Uint8Array(await file.arrayBuffer());
 
@@ -98,9 +99,11 @@ export const UniversalConverter: React.FC<UniversalConverterProps> = ({ onConver
         const path = paths[i];
         try {
           setProgressMsg(`Executing Route: ${[inFormat, ...path.steps.map(s => s.toFormat)].join(' → ')}`);
-          successBuf = await conversionGraph.runPath(buffer, path);
-          if (successBuf) {
+          const result = await conversionGraph.runPath(buffer, path);
+          if (result && result.data) {
+            successBuf = result.data;
             winningPath = path;
+            resultingKind = result.irNodeKind;
             break;
           }
         } catch {

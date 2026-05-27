@@ -4,6 +4,7 @@ import { Check, Download, FileText, ChevronDown, ChevronUp, Trash2, FileType, Im
 import { ProcessedFile, ConversionStatus } from '../types';
 import DotLoader from './DotLoader';
 import { downloadMarkdown, downloadPdf, downloadFillablePdf, downloadImages } from './file/downloadUtils';
+import { LensSelector } from './LensSelector';
 
 interface FileItemProps {
   file: ProcessedFile;
@@ -240,6 +241,9 @@ const ActionButton: React.FC<ActionButtonProps> = ({ onClick, disabled, classNam
                 );
               })()}
             </div>
+            <div className="mt-6">
+              <LensSelector file={file} />
+            </div>
           </div>
         ) : (
           <div className="flex items-center space-x-3 shrink-0 flex-wrap gap-y-2 justify-end w-full md:w-auto mt-4 md:mt-0 pt-4 md:pt-0 border-t md:border-none border-zinc-100">
@@ -335,6 +339,9 @@ const ActionButton: React.FC<ActionButtonProps> = ({ onClick, disabled, classNam
 
       {expanded && file.status === ConversionStatus.COMPLETED && (
         <div className="border-t border-zinc-200 bg-zinc-50 p-4 sm:p-6">
+           <div className="mb-6">
+             <LensSelector file={file} />
+           </div>
           {file.aiMetadata && (
             <div className="mb-6 bg-white border border-fuchsia-100 rounded-lg shadow-sm overflow-hidden p-0">
                <div className="bg-gradient-to-r from-fuchsia-50 to-purple-50 px-4 py-3 border-b border-fuchsia-100 flex items-center gap-2">

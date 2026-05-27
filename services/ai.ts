@@ -1,69 +1,66 @@
-// ============================================================
-// FORMAT-SMORMAT — AI SERVICE BRIDGE
-// Thin wrapper over the Worker API. Zero keys. Always /api.
-// Legacy surface kept for IngestionEngine / FileItem compat.
-// ============================================================
-import type { WorkerRequest, WorkerResponse } from '../types';
+interface GeminiTransformRequest {
+  mode: 'transform' | 'metadata' | 'lens_render' | 'ir_enrich';
+  action?: string;
+  customInstruction?: string;
+  lensId?: string;
+  nodeData?: string;
+  fileName?: string;
+  content: string;
+}
 
-const WORKER_URL: string =
-  (import.meta as any).env?.VITE_WORKER_URL ??
-  ((import.meta as any).env?.PROD
-    ? (() => { throw new Error('VITE_WORKER_URL is required in production.'); })()
-    : '/api');
+const PROXY_URL = (import.meta as any).env?.PROD ? (import.meta as any).env?.VITE_WORKER_URL || '/api' : '/api';
 
-const DEFAULT_TIMEOUT_MS = 120_000;
-
-async function callWorker(body: WorkerRequest): Promise<WorkerResponse> {
+export async function callWorker<T>(body: GeminiTransformRequest): Promise<T> {
   const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  const t = setTimeout(() => controller.abort(), 120_000);
   try {
-    const res = await fetch(WORKER_URL, {
+    const res = await fetch(PROXY_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-      signal: controller.signal,
+      signal: controller.signal
     });
     if (!res.ok) {
       const text = await res.text().catch(() => '');
-      throw new Error(`Worker error ${res.status}: ${text || res.statusText}`);
+      throw new Error(`Worker proxy error ${res.status}: ${text || res.statusText}`);
     }
-    return res.json() as Promise<WorkerResponse>;
+    return res.json() as Promise<T>;
   } finally {
     clearTimeout(t);
   }
 }
 
-/** Legacy: used by IngestionEngine + FileItem for full AI transforms */
-export async function runAiTransformation(
-  file: File,
-  extractedMarkdown: string,
-  action: string,
-  customInstruction?: string
-): Promise<string> {
-  const res = await callWorker({
+export async function runAiTransformation(file: File, extractedMarkdown: string, action: string, customInstruction?: string) {
+  const result = await callWorker<{ text: string }>({
     mode: 'transform',
-    action: action as any,
+    action,
     customInstruction,
     fileName: file.name,
-    content: extractedMarkdown,
+    content: extractedMarkdown
   });
-  return res.text ?? '';
+  return result.text || "";
 }
 
-/** Legacy: used by App.tsx handleAnalyzeFile */
-export async function extractDocumentMetadata(
-  content: string,
-  fileName: string
-): Promise<Record<string, unknown> | null> {
-  const res = await callWorker({ mode: 'metadata', fileName, content });
-  if (!res.text) return null;
-  try {
-    let text = res.text.trim();
-    if (text.startsWith('```')) {
-      text = text.replace(/^```(?:json)?/, '').replace(/```$/, '').trim();
+export async function extractDocumentMetadata(content: string, fileName: string) {
+  const responseText = await callWorker<{ text: string }>({
+    mode: 'metadata',
+    fileName,
+    content
+  });
+
+  if (responseText.text) {
+    try {
+      let text = responseText.text.trim();
+      if (text.startsWith('```json')) {
+        text = text.replace(/^```json/, '').replace(/```$/, '').trim();
+      } else if (text.startsWith('```')) {
+        text = text.replace(/^```/, '').replace(/```$/, '').trim();
+      }
+      return JSON.parse(text);
+    } catch (e) {
+      console.error("Failed to parse AI response", e);
+      return null;
     }
-    return JSON.parse(text);
-  } catch {
-    return null;
   }
+  return null;
 }
