@@ -1,5 +1,29 @@
-import React, { useCallback, useState } from 'react';
-import { Upload, FileCode, FileWarning, FileText, Image as ImageIcon, Archive, Edit3 } from 'lucide-react';
+import React, { useCallback, useState, useEffect } from 'react';
+import { Upload, FileWarning, FileText, Image as ImageIcon, Archive, Edit3 } from 'lucide-react';
+
+const MorphingTitle: React.FC<{ text: string }> = ({ text }) => {
+  const [fonts, setFonts] = useState<string[]>(Array(text.length).fill('font-sans'));
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setFonts(prev => prev.map(() => Math.random() > 0.85 ? 'font-serif italic text-pink-500/80' : 'font-sans'));
+      setTimeout(() => {
+        setFonts(Array(text.length).fill('font-sans'));
+      }, 300);
+    }, 1500);
+    return () => clearInterval(interval);
+  }, [text]);
+
+  return (
+    <>
+      {text.split('').map((char, i) => (
+        <span key={i} className={`inline-block transition-all duration-300 ${fonts[i]}`}>
+          {char === ' ' ? '\u00A0' : char}
+        </span>
+      ))}
+    </>
+  );
+}
 
 interface DropZoneProps {
   onFilesDropped: (files: File[]) => void;
@@ -111,7 +135,7 @@ const DropZone: React.FC<DropZoneProps> = ({ onFilesDropped, acceptAllFiles = fa
           </div>
 
           <h3 className="text-2xl font-serif mb-3 tracking-tight font-bold text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-teal-400 to-amber-400 animate-text-gradient">
-            {isDragActive ? 'Drop to initialize sequence' : 'Drag & Drop documents here'}
+            <MorphingTitle text={isDragActive ? 'Drop to initialize sequence' : 'Drag & Drop documents here'} />
           </h3>
           
           <p className="text-sm text-zinc-500 mb-10 max-w-md leading-relaxed">

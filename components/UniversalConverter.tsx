@@ -1,19 +1,18 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { ArrowRight, Settings2, Download, Check, AlertCircle, X, Search, Upload } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Settings2, AlertCircle, X, Search, Upload } from 'lucide-react';
 import { conversionGraph } from '../lib/format-router/graph';
-import { FormatDef } from '../lib/format-router/types';
 
 interface UniversalConverterProps {
   onConverted: (filename: string, bin: Uint8Array) => void;
+  initialFile?: File;
 }
 
-export const UniversalConverter: React.FC<UniversalConverterProps> = ({ onConverted }) => {
-  const [file, setFile] = useState<File | null>(null);
+export const UniversalConverter: React.FC<UniversalConverterProps> = ({ onConverted, initialFile }) => {
+  const [file, setFile] = useState<File | null>(initialFile || null);
   const [inFormat, setInFormat] = useState<string>('');
   const [outFormat, setOutFormat] = useState<string>('');
   
   const [isProcessing, setIsProcessing] = useState(false);
-  const [searchIn, setSearchIn] = useState('');
   const [searchOut, setSearchOut] = useState('');
   
   const [progressMsg, setProgressMsg] = useState('');
@@ -43,12 +42,12 @@ export const UniversalConverter: React.FC<UniversalConverterProps> = ({ onConver
     setProgressMsg('');
     
     // Auto-detect by mime
-    let detected = Array.from(conversionGraph.formats.values()).find(f => f.mimeTypes.includes(newFile.type));
+    let detected = Array.from(conversionGraph.formats.values()).find(f => f.mimeTypes && f.mimeTypes.includes(newFile.type));
     
     // Fallback exactly to extensions
     if (!detected) {
       const ext = '.' + newFile.name.split('.').pop()?.toLowerCase();
-      detected = Array.from(conversionGraph.formats.values()).find(f => f.extensions.includes(ext));
+      detected = Array.from(conversionGraph.formats.values()).find(f => f.extensions && f.extensions.includes(ext));
     }
 
     if (detected) {
@@ -56,16 +55,19 @@ export const UniversalConverter: React.FC<UniversalConverterProps> = ({ onConver
     }
   };
 
-  const handlePaste = (e: ClipboardEvent) => {
-    if (e.clipboardData?.files.length) {
-      handleNewFile(e.clipboardData.files[0]);
-    }
-  };
-
   useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      if (e.clipboardData?.files.length) {
+        handleNewFile(e.clipboardData.files[0]);
+      }
+    };
+    
     document.addEventListener('paste', handlePaste);
+    if (initialFile) {
+      handleNewFile(initialFile);
+    }
     return () => document.removeEventListener('paste', handlePaste);
-  }, []);
+  }, [initialFile]);
 
   const runConvert = async () => {
     if (!file || !inFormat || !outFormat) return;
@@ -89,6 +91,7 @@ export const UniversalConverter: React.FC<UniversalConverterProps> = ({ onConver
       // Try paths sequentially
       let successBuf: Uint8Array | null = null;
       let winningPath = null;
+      let resultingKind = 'RAW_FILE';
 
       const buffer = new Uint8Array(await file.arrayBuffer());
 
@@ -96,12 +99,14 @@ export const UniversalConverter: React.FC<UniversalConverterProps> = ({ onConver
         const path = paths[i];
         try {
           setProgressMsg(`Executing Route: ${[inFormat, ...path.steps.map(s => s.toFormat)].join(' → ')}`);
-          successBuf = await conversionGraph.runPath(buffer, path);
-          if (successBuf) {
+          const result = await conversionGraph.runPath(buffer, path);
+          if (result && result.data) {
+            successBuf = result.data;
             winningPath = path;
+            resultingKind = result.irNodeKind;
             break;
           }
-        } catch (e) {
+        } catch {
           // Log and continue to next path
           console.warn(`Path failed, trying next...`);
         }
