@@ -91,7 +91,6 @@ export const UniversalConverter: React.FC<UniversalConverterProps> = ({ onConver
       // Try paths sequentially
       let successBuf: Uint8Array | null = null;
       let winningPath = null;
-      let resultingKind = 'RAW_FILE';
 
       const buffer = new Uint8Array(await file.arrayBuffer());
 
@@ -103,7 +102,6 @@ export const UniversalConverter: React.FC<UniversalConverterProps> = ({ onConver
           if (result && result.data) {
             successBuf = result.data;
             winningPath = path;
-            resultingKind = result.irNodeKind;
             break;
           }
         } catch {
