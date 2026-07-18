@@ -9,12 +9,11 @@ import { LensSelector } from './LensSelector';
 interface FileItemProps {
   file: ProcessedFile;
   onRemove: (id: string) => void;
-  onProcess: (id: string, action: string) => void;
   onAnalyze?: (id: string) => void;
   onCinematic?: (id: string) => void;
 }
 
-const FileItem: React.FC<FileItemProps> = React.memo(({ file, onRemove, onProcess, onAnalyze, onCinematic }) => {
+const FileItem: React.FC<FileItemProps> = React.memo(({ file, onRemove, onAnalyze, onCinematic }) => {
   const [expanded, setExpanded] = useState(false);
   const [showFullMarkdown, setShowFullMarkdown] = useState(false);
 
@@ -113,8 +112,8 @@ const ActionButton: React.FC<ActionButtonProps> = ({ onClick, disabled, classNam
 
   const getStatusText = () => {
     switch (file.status) {
-      case ConversionStatus.AWAITING_ACTION:
-        return 'Action Required';
+      case ConversionStatus.ANALYZING_INGESTION:
+        return 'Analyzing format...';
       case ConversionStatus.READING:
         return 'Reading...';
       case ConversionStatus.PROCESSING:
@@ -142,112 +141,22 @@ const ActionButton: React.FC<ActionButtonProps> = ({ onClick, disabled, classNam
           </div>
           
           <div className="flex flex-col min-w-0">
-            <h4 className="text-sm font-medium text-zinc-900 truncate pr-4" title={file.status === ConversionStatus.AWAITING_ACTION ? 'Awaiting Action...' : file.markdownName}>
-              {file.status === ConversionStatus.AWAITING_ACTION ? file.originalName : file.markdownName}
+            <h4 className="text-sm font-medium text-zinc-900 truncate pr-4" title={file.status === ConversionStatus.ANALYZING_INGESTION ? 'Analyzing...' : file.markdownName}>
+              {file.status === ConversionStatus.ANALYZING_INGESTION ? file.originalName : file.markdownName}
             </h4>
             <div className="flex items-center space-x-2 text-[11px] text-zinc-500 mt-0.5 uppercase tracking-wider">
               <span>{formatSize(file.originalSize)}</span>
               <span>&mdash;</span>
-              <span className={file.status === ConversionStatus.READING || file.status === ConversionStatus.PROCESSING || file.status === ConversionStatus.AWAITING_ACTION ? "text-zinc-800 font-medium" : "text-zinc-500"}>
+              <span className={file.status === ConversionStatus.READING || file.status === ConversionStatus.PROCESSING || file.status === ConversionStatus.ANALYZING_INGESTION ? "text-zinc-800 font-medium" : "text-zinc-500"}>
                 {getStatusText()}
               </span>
             </div>
           </div>
         </div>
 
-        {file.status === ConversionStatus.AWAITING_ACTION ? (
-          <div className="w-full mt-4 pt-4 border-t border-zinc-100">
-            <h5 className="text-[10px] font-semibold text-zinc-400 uppercase tracking-widest mb-3">Specialist Recommendations</h5>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-              {(() => {
-                const ext = file.originalName.split('.').pop()?.toLowerCase();
-                if (ext === 'pdf') {
-                  return (
-                    <>
-                      <button onClick={() => onProcess(file.id, 'pdf_fillable')} className="flex flex-col text-left p-3 rounded-md bg-[#F9F9F7] border border-teal-200/50 hover:border-teal-400 hover:shadow-[0_0_15px_rgba(45,212,191,0.15)] transition-all group/btn">
-                        <div className="flex items-center space-x-2 mb-1">
-                          <Edit3 className="w-4 h-4 text-teal-600" />
-                          <span className="text-xs font-semibold text-zinc-900 uppercase tracking-wide">Form Specialist</span>
-                        </div>
-                        <p className="text-[10px] text-zinc-500 leading-relaxed">Auto-detects blank spaces and converts them into an interactive fillable PDF document.</p>
-                      </button>
-                      
-                      <button onClick={() => onProcess(file.id, 'extract_images')} className="flex flex-col text-left p-3 rounded-md bg-[#F9F9F7] border border-amber-200/50 hover:border-amber-400 hover:shadow-[0_0_15px_rgba(251,191,36,0.15)] transition-all group/btn">
-                        <div className="flex items-center space-x-2 mb-1">
-                          <ImageIcon className="w-4 h-4 text-amber-500" />
-                          <span className="text-xs font-semibold text-zinc-900 uppercase tracking-wide">Visual Specialist</span>
-                        </div>
-                        <p className="text-[10px] text-zinc-500 leading-relaxed">Rips the document apart to extract graphical assets or page-by-page PNG renders.</p>
-                      </button>
-
-                      <button onClick={() => onProcess(file.id, 'markdown_raw')} className="flex flex-col text-left p-3 rounded-md bg-[#F9F9F7] border border-pink-200/50 hover:border-pink-400 hover:shadow-[0_0_15px_rgba(236,72,153,0.15)] transition-all group/btn">
-                        <div className="flex items-center space-x-2 mb-1">
-                          <FileText className="w-4 h-4 text-pink-500" />
-                          <span className="text-xs font-semibold text-zinc-900 uppercase tracking-wide">Content Specialist</span>
-                        </div>
-                        <p className="text-[10px] text-zinc-500 leading-relaxed">Extracts the core textual content into raw, universally usable Markdown structures.</p>
-                      </button>
-                    </>
-                  );
-                }
-                if (ext === 'html' || ext === 'htm') {
-                  return (
-                    <>
-                      <button onClick={() => onProcess(file.id, 'markdown_smart')} className="flex flex-col text-left p-3 rounded-md bg-[#F9F9F7] border border-pink-200/50 hover:border-pink-400 hover:shadow-[0_0_15px_rgba(236,72,153,0.15)] transition-all group/btn">
-                        <div className="flex items-center space-x-2 mb-1">
-                          <FileText className="w-4 h-4 text-pink-500" />
-                          <span className="text-xs font-semibold text-zinc-900 uppercase tracking-wide">Article Specialist</span>
-                        </div>
-                        <p className="text-[10px] text-zinc-500 leading-relaxed">Strips out HTML boilerplate, nav, and footers, extracting only the clean article semantic content.</p>
-                      </button>
-                      <button onClick={() => onProcess(file.id, 'markdown_raw')} className="flex flex-col text-left p-3 rounded-md bg-[#F9F9F7] border border-zinc-200/50 hover:border-zinc-400 hover:shadow-[0_0_15px_rgba(161,161,170,0.15)] transition-all group/btn">
-                        <div className="flex items-center space-x-2 mb-1">
-                          <FileText className="w-4 h-4 text-zinc-600" />
-                          <span className="text-xs font-semibold text-zinc-900 uppercase tracking-wide">Raw Extraction</span>
-                        </div>
-                        <p className="text-[10px] text-zinc-500 leading-relaxed">Dumps the raw HTML conversion without filtering or removing boilerplate logic.</p>
-                      </button>
-                    </>
-                  );
-                }
-                if (ext === 'docx') {
-                  return (
-                    <>
-                      <button onClick={() => onProcess(file.id, 'markdown_raw')} className="flex flex-col text-left p-3 rounded-md bg-[#F9F9F7] border border-pink-200/50 hover:border-pink-400 hover:shadow-[0_0_15px_rgba(236,72,153,0.15)] transition-all group/btn">
-                        <div className="flex items-center space-x-2 mb-1">
-                          <FileText className="w-4 h-4 text-pink-500" />
-                          <span className="text-xs font-semibold text-zinc-900 uppercase tracking-wide">Content Specialist</span>
-                        </div>
-                        <p className="text-[10px] text-zinc-500 leading-relaxed">Extracts all text, lists, and tables into cleanly parsed structure Markdown.</p>
-                      </button>
-                      <button onClick={() => onProcess(file.id, 'docx_to_pdf')} className="flex flex-col text-left p-3 rounded-md bg-[#F9F9F7] border border-teal-200/50 hover:border-teal-400 hover:shadow-[0_0_15px_rgba(45,212,191,0.15)] transition-all group/btn">
-                        <div className="flex items-center space-x-2 mb-1">
-                          <FileType className="w-4 h-4 text-teal-600" />
-                          <span className="text-xs font-semibold text-zinc-900 uppercase tracking-wide">Format Specialist</span>
-                        </div>
-                        <p className="text-[10px] text-zinc-500 leading-relaxed">Lossless locked formatting conversion directly from Word to PDF.</p>
-                      </button>
-                    </>
-                  );
-                }
-                return (
-                  <button onClick={() => onProcess(file.id, 'markdown_raw')} className="flex flex-col text-left p-3 rounded-md bg-[#F9F9F7] border border-zinc-200/50 hover:border-zinc-400 hover:shadow-[0_0_15px_rgba(161,161,170,0.15)] transition-all group/btn">
-                    <div className="flex items-center space-x-2 mb-1">
-                      <Check className="w-4 h-4 text-zinc-600" />
-                      <span className="text-xs font-semibold text-zinc-900 uppercase tracking-wide">Default Process</span>
-                    </div>
-                    <p className="text-[10px] text-zinc-500 leading-relaxed">Initiates the standard pipeline parsing.</p>
-                  </button>
-                );
-              })()}
-            </div>
-            <div className="mt-6">
-              <LensSelector file={file} />
-            </div>
-          </div>
-        ) : (
-          <div className="flex items-center space-x-3 shrink-0 flex-wrap gap-y-2 justify-end w-full md:w-auto mt-4 md:mt-0 pt-4 md:pt-0 border-t md:border-none border-zinc-100">
-            {file.status === ConversionStatus.COMPLETED && (
+        {/* Actions Context */}
+        <div className="flex items-center space-x-3 shrink-0 flex-wrap gap-y-2 justify-end w-full md:w-auto mt-4 md:mt-0 pt-4 md:pt-0 border-t md:border-none border-zinc-100">
+          {file.status === ConversionStatus.COMPLETED && (
               <>
                 <button
                   onClick={() => onCinematic?.(file.id)}
@@ -334,7 +243,6 @@ const ActionButton: React.FC<ActionButtonProps> = ({ onClick, disabled, classNam
               <Trash2 className="w-4 h-4" />
             </button>
           </div>
-        )}
       </div>
 
       {expanded && file.status === ConversionStatus.COMPLETED && (

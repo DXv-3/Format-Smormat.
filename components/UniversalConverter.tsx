@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Settings2, AlertCircle, X, Search, Upload } from 'lucide-react';
 import { conversionGraph } from '../lib/format-router/graph';
+import { bootstrapFormatRouter } from '../lib/format-router/bootstrap';
 
 interface UniversalConverterProps {
-  onConverted: (filename: string, bin: Uint8Array) => void;
+  onConverted: (filename: string, bin: Uint8Array, irNodeKind: string) => void;
   initialFile?: File;
 }
 
@@ -77,8 +78,6 @@ export const UniversalConverter: React.FC<UniversalConverterProps> = ({ onConver
 
     try {
       if (conversionGraph.handlers.size === 0) {
-        // Safe lazy load
-        const { bootstrapFormatRouter } = await import('../lib/format-router/bootstrap');
         bootstrapFormatRouter();
         await conversionGraph.initAllSupported();
       }
@@ -91,6 +90,7 @@ export const UniversalConverter: React.FC<UniversalConverterProps> = ({ onConver
       // Try paths sequentially
       let successBuf: Uint8Array | null = null;
       let winningPath = null;
+      let finalIrNodeKind = 'RAW_FILE';
 
       const buffer = new Uint8Array(await file.arrayBuffer());
 
@@ -98,10 +98,11 @@ export const UniversalConverter: React.FC<UniversalConverterProps> = ({ onConver
         const path = paths[i];
         try {
           setProgressMsg(`Executing Route: ${[inFormat, ...path.steps.map(s => s.toFormat)].join(' → ')}`);
-          const result = await conversionGraph.runPath(buffer, path);
+          const result = await conversionGraph.runPath(buffer, path, { name: file.name, type: file.type });
           if (result && result.data) {
             successBuf = result.data;
             winningPath = path;
+            finalIrNodeKind = result.irNodeKind;
             break;
           }
         } catch {
@@ -120,7 +121,7 @@ export const UniversalConverter: React.FC<UniversalConverterProps> = ({ onConver
       const outExt = conversionGraph.formats.get(outFormat)?.extensions[0] || `.${outFormat}`;
       const newName = file.name.split('.').slice(0, -1).join('.') + outExt;
       
-      onConverted(newName, successBuf);
+      onConverted(newName, successBuf, finalIrNodeKind);
 
     } catch (err: any) {
       setErrorMsg(err.message || 'Conversion failed');

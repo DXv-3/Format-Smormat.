@@ -8,7 +8,7 @@ import { UniversalConverter } from './UniversalConverter';
 interface IngestionEngineProps {
   file: ProcessedFile;
   onExecuteSpecialist: (id: string, action: string, customInstruction?: string) => void;
-  onExecuteUniversal: (id: string, extOut: string, buf: Uint8Array) => void;
+  onExecuteUniversal: (id: string, extOut: string, buf: Uint8Array, irNodeKind: string) => void;
   onAnalyze: (id: string) => void;
 }
 
@@ -194,7 +194,7 @@ export const IngestionEngine: React.FC<IngestionEngineProps> = ({ file, onExecut
         </div>
         <UniversalConverter 
           initialFile={file.rawFile} 
-          onConverted={(filename, buf) => onExecuteUniversal(file.id, filename, buf)} 
+          onConverted={(filename, buf, kind) => onExecuteUniversal(file.id, filename, buf, kind)} 
         />
       </motion.div>
     );

@@ -6,7 +6,7 @@ const MorphingTitle: React.FC<{ text: string }> = ({ text }) => {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setFonts(prev => prev.map(() => Math.random() > 0.85 ? 'font-serif italic text-pink-500/80' : 'font-sans'));
+      setFonts(prev => prev.map(() => Math.random() > 0.85 ? 'font-serif italic text-zinc-400' : 'font-sans'));
       setTimeout(() => {
         setFonts(Array(text.length).fill('font-sans'));
       }, 300);
@@ -92,14 +92,9 @@ const DropZone: React.FC<DropZoneProps> = ({ onFilesDropped, acceptAllFiles = fa
   };
 
   return (
-    <div className={`relative w-full rounded-2xl p-[3px] transition-all duration-500 hover:scale-[1.01] ${isDragActive ? 'scale-[1.02]' : ''}`}>
-      {/* Neon Glow Layer */}
-      <div 
-        className={`absolute inset-0 rounded-2xl bg-gradient-to-r from-pink-500 via-teal-400 to-amber-400 blur-xl transition-all duration-500 animate-border-flow
-        ${isDragActive ? 'opacity-100 shadow-[0_0_40px_rgba(74,222,128,0.8)]' : 'opacity-40 group-hover:opacity-80'}`}
-      ></div>
-      {/* Solid Neon Border */}
-      <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-pink-500 via-teal-400 to-amber-400 animate-border-flow"></div>
+    <div className={`relative w-full p-[3px] transition-all duration-300 ${isDragActive ? 'scale-[1.01]' : ''}`}>
+      {/* Solid Brutalist Border */}
+      <div className="absolute inset-0 border-[3px] border-zinc-900 bg-zinc-900 shadow-[8px_8px_0px_0px_rgba(24,24,27,1)] transition-all duration-300"></div>
 
       <div
         onDragEnter={handleDragEnter}
@@ -107,10 +102,10 @@ const DropZone: React.FC<DropZoneProps> = ({ onFilesDropped, acceptAllFiles = fa
         onDragOver={handleDragOver}
         onDrop={handleDrop}
         className={`
-          relative z-10 group cursor-pointer transition-colors duration-300 ease-out
-          flex flex-col items-center justify-center text-center rounded-[13px]
-          min-h-[400px] w-full bg-white overflow-hidden
-          ${isDragActive ? 'bg-white/90 backdrop-blur-sm' : ''}
+          relative z-10 group cursor-pointer transition-colors duration-200 ease-out
+          flex flex-col items-center justify-center text-center
+          min-h-[350px] w-full bg-white overflow-hidden
+          ${isDragActive ? 'bg-zinc-100' : ''}
         `}
       >
         <input 
@@ -124,53 +119,53 @@ const DropZone: React.FC<DropZoneProps> = ({ onFilesDropped, acceptAllFiles = fa
         <div className="flex flex-col items-center p-12 max-w-2xl mx-auto z-0 pointer-events-none">
           <div className={`transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${isDragActive ? 'scale-110 -translate-y-2' : 'scale-100'}`}>
             {errorMsg ? (
-              <div className="mb-6 text-red-600 bg-red-50 p-4 rounded-full shadow-[0_0_15px_rgba(220,38,38,0.3)]">
-                 <FileWarning className="w-8 h-8 mx-auto" strokeWidth={1.5} />
+              <div className="mb-6 text-red-600 bg-white border-2 border-red-600 p-4 shadow-[4px_4px_0px_0px_rgba(220,38,38,1)]">
+                 <FileWarning className="w-8 h-8 mx-auto" strokeWidth={2} />
               </div>
             ) : (
-              <div className="mb-6 p-4 rounded-full transition-all duration-300 bg-gradient-to-r from-pink-500 to-teal-400 text-white shadow-[0_0_20px_rgba(236,72,153,0.3)]">
-                 <Upload className="w-8 h-8 mx-auto" strokeWidth={1.5} />
+              <div className="mb-6 p-4 border-2 border-zinc-900 bg-zinc-900 text-white shadow-[4px_4px_0px_0px_rgba(24,24,27,0.2)] transition-all duration-300">
+                 <Upload className="w-8 h-8 mx-auto" strokeWidth={2} />
               </div>
             )}
           </div>
 
-          <h3 className="text-2xl font-serif mb-3 tracking-tight font-bold text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-teal-400 to-amber-400 animate-text-gradient">
-            <MorphingTitle text={isDragActive ? 'Drop to initialize sequence' : 'Drag & Drop documents here'} />
+          <h3 className="text-3xl md:text-5xl font-serif mb-4 tracking-tighter font-black text-zinc-900 uppercase">
+            <MorphingTitle text={isDragActive ? 'DROP IT' : 'DROP ANY FILE HERE'} />
           </h3>
           
-          <p className="text-sm text-zinc-500 mb-10 max-w-md leading-relaxed">
+          <p className="text-sm text-zinc-600 mb-10 max-w-md leading-relaxed font-mono font-medium">
             {errorMsg ? (
-              <span className="text-red-600 font-medium">{errorMsg}</span>
+              <span className="text-red-600 font-bold">{errorMsg}</span>
             ) : (
-              "Browse or drop your files securely. All processing happens entirely inside your browser sandbox."
+              "NO CLOUD. NO UPLOADS. ZERO BULLSHIT. WE PROCESS IT ALL CLIENT-SIDE."
             )}
           </p>
 
           {/* Feature Capability Grid */}
           <div className={`grid grid-cols-2 md:grid-cols-4 gap-4 w-full transition-opacity duration-500 ${isDragActive ? 'opacity-30' : 'opacity-100'}`}>
             
-            <div className="flex flex-col items-center p-4 bg-[#F9F9F7] border border-zinc-200/60 rounded-md group-hover:border-teal-200 transition-colors">
-              <Edit3 className="w-5 h-5 text-teal-500 mb-2" strokeWidth={1.5} />
-              <span className="text-[11px] font-semibold text-zinc-900 uppercase tracking-wider mb-1">Fillable PDF</span>
-              <span className="text-[10px] text-zinc-500">Auto-detect blanks</span>
+            <div className="flex flex-col items-center p-4 bg-zinc-50 border-2 border-zinc-900 group-hover:bg-zinc-900 group-hover:text-white transition-colors duration-300">
+              <Edit3 className="w-6 h-6 mb-3 transition-colors duration-300" strokeWidth={2} />
+              <span className="text-[11px] font-bold uppercase tracking-wider mb-1">Fillable PDF</span>
+              <span className="text-[10px] opacity-70 font-mono">Auto-detect blanks</span>
             </div>
 
-            <div className="flex flex-col items-center p-4 bg-[#F9F9F7] border border-zinc-200/60 rounded-md group-hover:border-pink-200 transition-colors">
-              <FileText className="w-5 h-5 text-pink-500 mb-2" strokeWidth={1.5} />
-              <span className="text-[11px] font-semibold text-zinc-900 uppercase tracking-wider mb-1">Clean MD</span>
-              <span className="text-[10px] text-zinc-500">Docx, HTML, PDF</span>
+            <div className="flex flex-col items-center p-4 bg-zinc-50 border-2 border-zinc-900 group-hover:bg-zinc-900 group-hover:text-white transition-colors duration-300">
+              <FileText className="w-6 h-6 mb-3 transition-colors duration-300" strokeWidth={2} />
+              <span className="text-[11px] font-bold uppercase tracking-wider mb-1">Clean MD</span>
+              <span className="text-[10px] opacity-70 font-mono">Docx, HTML, PDF</span>
             </div>
 
-            <div className="flex flex-col items-center p-4 bg-[#F9F9F7] border border-zinc-200/60 rounded-md group-hover:border-amber-200 transition-colors">
-              <ImageIcon className="w-5 h-5 text-amber-500 mb-2" strokeWidth={1.5} />
-              <span className="text-[11px] font-semibold text-zinc-900 uppercase tracking-wider mb-1">Image Rip</span>
-              <span className="text-[10px] text-zinc-500">Extracts PDF Pages</span>
+            <div className="flex flex-col items-center p-4 bg-zinc-50 border-2 border-zinc-900 group-hover:bg-zinc-900 group-hover:text-white transition-colors duration-300">
+              <ImageIcon className="w-6 h-6 mb-3 transition-colors duration-300" strokeWidth={2} />
+              <span className="text-[11px] font-bold uppercase tracking-wider mb-1">Image Rip</span>
+              <span className="text-[10px] opacity-70 font-mono">Extracts PDF Pages</span>
             </div>
 
-            <div className="flex flex-col items-center p-4 bg-[#F9F9F7] border border-zinc-200/60 rounded-md group-hover:border-teal-200 transition-colors">
-              <Archive className="w-5 h-5 text-teal-600 mb-2" strokeWidth={1.5} />
-              <span className="text-[11px] font-semibold text-zinc-900 uppercase tracking-wider mb-1">Code Dump</span>
-              <span className="text-[10px] text-zinc-500">Unpacks ZIPs / CRXs</span>
+            <div className="flex flex-col items-center p-4 bg-zinc-50 border-2 border-zinc-900 group-hover:bg-zinc-900 group-hover:text-white transition-colors duration-300">
+              <Archive className="w-6 h-6 mb-3 transition-colors duration-300" strokeWidth={2} />
+              <span className="text-[11px] font-bold uppercase tracking-wider mb-1">Code Dump</span>
+              <span className="text-[10px] opacity-70 font-mono">Unpacks ZIPs / CRXs</span>
             </div>
 
           </div>

@@ -22,10 +22,12 @@ const App: React.FC = () => {
     menuOpen,
     cinematicFileId,
     appReady,
+    showClearModal,
     setCopiedAll,
     setMenuOpen,
     setCinematicFileId,
     setAppReady,
+    setShowClearModal,
     addFiles,
     removeFile,
     clearAll,
@@ -57,13 +59,40 @@ const App: React.FC = () => {
     
     try {
       const result = await processUniversalFile(fileEntry.rawFile, action, customInstruction);
+      
+      const { addIRNode, addIREdge } = useFileStore.getState();
+      const resultNodeId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
+      
+      // Determine what kind of node we got back
+      let nodeKind: 'MARKDOWN' | 'ENTITIES' | 'JSON' | 'CSV' | 'VECTOR' | 'IMAGE' | 'RAW_FILE' = 'MARKDOWN';
+      if (result.images && result.images.length > 0) nodeKind = 'IMAGE';
+      
+      addIRNode({
+        id: resultNodeId,
+        kind: nodeKind,
+        content: result.markdown || { images: result.images, pdfUrl: result.pdfUrl, fillable: result.fillablePdfUrl },
+        metadata: { source: fileEntry.originalName, action, customInstruction },
+        timestamp: Date.now()
+      });
+      
+      // Link back to original if we had an IRNode for the original. Currently original doesn't get an IR Node until it completes... Wait, Phase A says "Every file immediately becomes an IRNode".
+      // Let's just create an edge if fileEntry.irNodeId exists
+      if (fileEntry.irNodeId) {
+        addIREdge({
+          sourceId: fileEntry.irNodeId,
+          targetId: resultNodeId,
+          relation: 'TRANSFORMED_BY_ACTION'
+        });
+      }
+
       updateFile(id, { 
         status: ConversionStatus.COMPLETED,
         content: result.markdown || '',
         markdownName: result.smartName || fileEntry.originalName,
         pdfUrl: result.pdfUrl,
         images: result.images,
-        fillablePdfUrl: result.fillablePdfUrl
+        fillablePdfUrl: result.fillablePdfUrl,
+        irNodeId: resultNodeId
       });
     } catch (err) {
       console.error(err);
@@ -86,9 +115,7 @@ const App: React.FC = () => {
   }, [files, updateFile]);
 
   const handleClearAll = () => {
-    if (confirm('Are you sure you want to clear all converted files?')) {
-      clearAll();
-    }
+    setShowClearModal(true);
   };
 
   const handleDownloadAll = () => {
@@ -209,6 +236,31 @@ const App: React.FC = () => {
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {showClearModal && (
+          <motion.div 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }} 
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-zinc-950/40 backdrop-blur-sm"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, y: 20 }} 
+              animate={{ scale: 1, y: 0 }} 
+              exit={{ scale: 0.95, y: 20 }}
+              className="bg-zinc-50 p-8 max-w-md w-full border-4 border-zinc-900 shadow-[12px_12px_0px_0px_rgba(24,24,27,1)]"
+            >
+              <h3 className="text-3xl font-serif font-black uppercase text-zinc-900 mb-2 tracking-tight">Erase Memory</h3>
+              <p className="text-zinc-600 mb-8 font-mono text-sm font-medium">Are you sure you want to completely erase the IR graph and all ingested artifacts? This cannot be undone.</p>
+              <div className="flex justify-end space-x-3">
+                <button onClick={() => setShowClearModal(false)} className="px-5 py-2.5 border-2 border-zinc-900 text-zinc-900 font-bold uppercase tracking-wider hover:bg-zinc-200 transition-colors shadow-[4px_4px_0px_0px_rgba(24,24,27,1)] active:translate-y-1 active:shadow-none">Cancel</button>
+                <button onClick={() => clearAll()} className="px-5 py-2.5 border-2 border-zinc-900 bg-red-600 text-white font-bold uppercase tracking-wider hover:bg-red-700 transition-colors shadow-[4px_4px_0px_0px_rgba(24,24,27,1)] active:translate-y-1 active:shadow-none">Obliterate</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Hero Sequence */}
       <HeroSequence />
 
@@ -221,10 +273,10 @@ const App: React.FC = () => {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: "-100px" }}
             transition={{ duration: 0.8, ease: "easeOut" }}
-            className="text-center mb-16 max-w-2xl mx-auto px-4"
+            className="text-center mb-16 max-w-3xl mx-auto px-4"
           >
-            <p className="text-zinc-600 text-lg md:text-xl leading-relaxed tracking-wide font-medium">
-              An intelligent conduit for your data. Drop documents below to instantly extract parsed structures, convert across complex schemas, or generate exact fillable forms.
+            <p className="text-zinc-800 text-xl md:text-2xl leading-relaxed tracking-tight font-serif italic">
+              "The universal bottleneck solver. It doesn't matter what the fuck it is. I can make it all talk. I can make it all make sense. Take a breath and just let me format schmformat it."
             </p>
           </motion.div>
 
@@ -258,12 +310,21 @@ const App: React.FC = () => {
                           file={file} 
                           onExecuteSpecialist={handleProcessFile} 
                           onAnalyze={handleAnalyzeFile}
-                          onExecuteUniversal={async (id, name, buf) => {
+                          onExecuteUniversal={async (id, name, buf, kind) => {
+                            const nodeId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
+                            useFileStore.getState().addIRNode({
+                              id: nodeId,
+                              kind: kind as 'MARKDOWN' | 'RAW_FILE' | 'JSON' | 'CSV',
+                              content: new TextDecoder().decode(buf), // we can refine this later
+                              metadata: { source: name },
+                              timestamp: Date.now()
+                            });
                             updateFile(id, {
                               status: ConversionStatus.COMPLETED,
                               content: 'Universal Binary Object generated.',
                               markdownName: name,
-                              pdfUrl: URL.createObjectURL(new Blob([buf]))
+                              pdfUrl: URL.createObjectURL(new Blob([buf])),
+                              irNodeId: nodeId
                             });
                           }} 
                         />
@@ -282,7 +343,6 @@ const App: React.FC = () => {
                       <FileItem 
                         file={file} 
                         onRemove={removeFile} 
-                        onProcess={handleProcessFile}
                         onAnalyze={handleAnalyzeFile}
                         onCinematic={setCinematicFileId} 
                       />
@@ -296,30 +356,30 @@ const App: React.FC = () => {
               <div className="mt-8 pt-6 border-t border-zinc-200 flex justify-between items-center">
                  <button 
                   onClick={handleCopyAll}
-                  className="flex items-center space-x-1.5 text-sm text-zinc-600 hover:text-zinc-900 transition-colors font-medium"
+                  className="flex items-center space-x-1.5 text-sm border-2 border-zinc-900 bg-zinc-100 text-zinc-900 px-4 py-2 hover:bg-zinc-900 hover:text-white transition-colors font-bold shadow-[4px_4px_0px_0px_rgba(24,24,27,1)] active:translate-y-1 active:shadow-none uppercase"
                 >
-                  {copiedAll ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                  <span>{copiedAll ? 'Copied' : 'Copy All Content'}</span>
+                  {copiedAll ? <Check className="w-4 h-4" strokeWidth={2} /> : <Copy className="w-4 h-4" strokeWidth={2} />}
+                  <span>{copiedAll ? 'COPIED' : 'COPY ALL'}</span>
                 </button>
                 <div className="flex space-x-4">
                   <button 
                     onClick={handleClearAll}
-                    className="text-sm text-zinc-500 hover:text-red-600 transition-colors font-medium"
+                    className="text-sm text-zinc-500 hover:text-red-600 transition-colors font-bold uppercase tracking-wider px-3"
                   >
                     Clear All
                   </button>
                   <button 
                     onClick={handleExportGraph}
-                    className="flex items-center space-x-1.5 text-sm bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg transition-colors font-medium shadow-md"
+                    className="flex items-center space-x-1.5 text-sm bg-white border-2 border-zinc-900 text-zinc-900 px-5 py-2 hover:bg-zinc-900 hover:text-white transition-colors font-bold shadow-[4px_4px_0px_0px_rgba(24,24,27,1)] active:translate-y-1 active:shadow-none uppercase"
                   >
-                    <Network className="w-4 h-4" />
-                    <span>Export Knowledge Graph</span>
+                    <Network className="w-4 h-4" strokeWidth={2} />
+                    <span>Export Graph</span>
                   </button>
                   <button 
                     onClick={handleDownloadAll}
-                    className="flex items-center space-x-1.5 text-sm bg-zinc-900 hover:bg-zinc-800 text-white px-5 py-2 rounded-lg transition-colors font-medium shadow-md"
+                    className="flex items-center space-x-1.5 text-sm bg-zinc-900 border-2 border-zinc-900 hover:bg-white text-white hover:text-zinc-900 px-5 py-2 transition-colors font-bold shadow-[4px_4px_0px_0px_rgba(24,24,27,1)] active:translate-y-1 active:shadow-none uppercase"
                   >
-                    <Download className="w-4 h-4" />
+                    <Download className="w-4 h-4" strokeWidth={2} />
                     <span>Download Merged</span>
                   </button>
                 </div>

@@ -5,129 +5,79 @@ import JSZip from 'jszip';
 // Dynamic imports are configured for heavy modules (mammoth, html2pdf, pdfjs-dist) inside process files
 // to significantly reduce initial bundle size and speed up load time.
 
-// PERFORMANCE OPTIMIZATION: Lazy initialization of Turndown service
-// Only creates the instance when first needed, reducing initial load time
-let _turndownService: TurndownService | null = null;
+// Initialize Turndown service with GitHub-flavored markdown options
+const turndownService = new TurndownService({
+  headingStyle: 'atx',
+  codeBlockStyle: 'fenced',
+  emDelimiter: '*',
+  bulletListMarker: '-',
+  hr: '---'
+});
 
-const getTurndownService = (): TurndownService => {
-  if (!_turndownService) {
-    _turndownService = new TurndownService({
-      headingStyle: 'atx',
-      codeBlockStyle: 'fenced',
-      emDelimiter: '*',
-      bulletListMarker: '-',
-      hr: '---'
-    });
+// Add rules to strip unnecessary tags often found in raw HTML dumps
+turndownService.addRule('script', {
+  filter: ['script', 'style', 'iframe', 'svg', 'nav', 'footer', 'aside', 'noscript'],
+  replacement: () => ''
+});
 
-    // Add rules to strip unnecessary tags often found in raw HTML dumps
-    _turndownService.addRule('script', {
-      filter: ['script', 'style', 'iframe', 'svg', 'nav', 'footer', 'aside', 'noscript'],
-      replacement: () => ''
-    });
-
-    // Strip inline base64 images (like logos or trackers) to keep markdown clean
-    _turndownService.addRule('inline-images', {
-      filter: function (node) {
-        if (node.nodeName === 'IMG') {
-          const src = (node as HTMLElement).getAttribute('src');
-          if (src && src.startsWith('data:image')) {
-            return true;
-          }
-        }
-        return false;
-      },
-      replacement: () => ''
-    });
-  }
-  return _turndownService;
-};
-
-// PERFORMANCE OPTIMIZATION: Cache for Readability instances to avoid re-parsing same content
-const readabilityCache = new Map<string, any>();
+// Strip inline base64 images (like logos or trackers) to keep markdown clean
+turndownService.addRule('inline-images', {
+  filter: function (node) {
+    if (node.nodeName === 'IMG') {
+      const src = (node as HTMLElement).getAttribute('src');
+      if (src && src.startsWith('data:image')) {
+        return true;
+      }
+    }
+    return false;
+  },
+  replacement: () => ''
+});
 
 export const convertHtmlToMarkdown = (htmlContent: string, smartExtract: boolean = false): string => {
   try {
     let contentToConvert = htmlContent;
     
     if (smartExtract) {
-      // PERFORMANCE OPTIMIZATION: Simple cache key based on content length and first/last chars
-      const cacheKey = `${htmlContent.length}-${htmlContent.slice(0, 50)}-${htmlContent.slice(-50)}`;
+      // Create a DOM document from the HTML string
+      const doc = new DOMParser().parseFromString(htmlContent, 'text/html');
       
-      if (readabilityCache.has(cacheKey)) {
-        contentToConvert = readabilityCache.get(cacheKey);
+      // Try to use Mozilla Readability to extract the core content
+      const reader = new Readability(doc);
+      const article = reader.parse();
+      
+      if (article && article.content) {
+        contentToConvert = article.content;
       } else {
-        // Create a DOM document from the HTML string
-        const doc = new DOMParser().parseFromString(htmlContent, 'text/html');
-        
-        // Try to use Mozilla Readability to extract the core content
-        const reader = new Readability(doc);
-        const article = reader.parse();
-        
-        if (article && article.content) {
-          contentToConvert = article.content;
-        } else {
-          // Fallback: if Readability fails to find an article, we can try to manually strip common noise elements
-          const fallbackDoc = new DOMParser().parseFromString(htmlContent, 'text/html');
-          const noiseSelectors = ['nav', 'footer', 'aside', 'header', '.sidebar', '#sidebar', '.menu', '.navigation'];
-          noiseSelectors.forEach(selector => {
-            fallbackDoc.querySelectorAll(selector).forEach(el => el.remove());
-          });
-          contentToConvert = fallbackDoc.body.innerHTML;
-        }
-        
-        // Cache the result (limit cache size to prevent memory leaks)
-        if (readabilityCache.size > 100) {
-          readabilityCache.clear();
-        }
-        readabilityCache.set(cacheKey, contentToConvert);
+        // Fallback: if Readability fails to find an article, we can try to manually strip common noise elements
+        const fallbackDoc = new DOMParser().parseFromString(htmlContent, 'text/html');
+        const noiseSelectors = ['nav', 'footer', 'aside', 'header', '.sidebar', '#sidebar', '.menu', '.navigation'];
+        noiseSelectors.forEach(selector => {
+          fallbackDoc.querySelectorAll(selector).forEach(el => el.remove());
+        });
+        contentToConvert = fallbackDoc.body.innerHTML;
       }
     }
 
-    return getTurndownService().turndown(contentToConvert);
+    return turndownService.turndown(contentToConvert);
   } catch (error) {
     console.error("Conversion failed:", error);
     throw new Error("Failed to parse HTML content.", { cause: error });
   }
 };
 
-// PERFORMANCE OPTIMIZATION: Cache for JSON to Markdown conversions
-const jsonMarkdownCache = new Map<string, string>();
-
 export const convertJsonToMarkdown = (jsonContent: string): string => {
   try {
-    // PERFORMANCE OPTIMIZATION: Check cache first using content hash as key
-    const cacheKey = `json-${jsonContent.length}-${jsonContent.slice(0, 100)}`;
-    if (jsonMarkdownCache.has(cacheKey)) {
-      return jsonMarkdownCache.get(cacheKey)!;
-    }
-    
     const data = JSON.parse(jsonContent);
-    const result = jsonToMarkdownRecursive(data);
-    
-    // Cache the result (limit cache size to prevent memory leaks)
-    if (jsonMarkdownCache.size > 50) {
-      jsonMarkdownCache.clear();
-    }
-    jsonMarkdownCache.set(cacheKey, result);
-    
-    return result;
+    return jsonToMarkdownRecursive(data);
   } catch (error) {
     console.error("JSON Conversion failed:", error);
     throw new Error("Failed to parse JSON content.", { cause: error });
   }
 };
 
-// PERFORMANCE OPTIMIZATION: Pre-compute common indentations to avoid repeated string.repeat calls
-const INDENT_CACHE = ['  ', '    ', '      ', '        ', '          ', '            ', '              ', '                '];
-const getCachedIndent = (depth: number): string => {
-  if (depth < INDENT_CACHE.length) {
-    return INDENT_CACHE[depth];
-  }
-  return '  '.repeat(depth);
-};
-
 const jsonToMarkdownRecursive = (data: any, depth: number = 0): string => {
-  const indent = getCachedIndent(depth);
+  const indent = '  '.repeat(depth);
   
   if (data === null) return 'null';
   if (data === undefined) return 'undefined';
@@ -155,19 +105,10 @@ const jsonToMarkdownRecursive = (data: any, depth: number = 0): string => {
   return String(data);
 };
 
-// PERFORMANCE OPTIMIZATION: Cache for smart filename extraction
-const filenameCache = new Map<string, string>();
-
 export const getSmartFilename = (originalName: string, content: string): string => {
-  // PERFORMANCE OPTIMIZATION: Quick cache lookup
-  const cacheKey = `${originalName}-${content.length}-${content.slice(0, 50)}`;
-  if (filenameCache.has(cacheKey)) {
-    return filenameCache.get(cacheKey)!;
-  }
-  
   try {
     let baseName = '';
-
+    
     if (originalName.toLowerCase().endsWith('.json')) {
       // For JSON, try to find a "name" or "title" field in the top level
       try {
@@ -188,25 +129,17 @@ export const getSmartFilename = (originalName: string, content: string): string 
     if (!baseName) {
       baseName = originalName.substring(0, originalName.lastIndexOf('.')) || originalName;
     }
-
+    
     // Sanitize: allow alphanumeric, spaces, hyphens, underscores, dots, parentheses
     baseName = baseName.replace(/[^a-z0-9 \-_().]/gi, '').trim();
-
+    
     // Collapse multiple spaces
     baseName = baseName.replace(/\s+/g, ' ');
-
+    
     // Fallback if sanitization left it empty
     if (!baseName) baseName = 'untitled';
 
-    const result = `${baseName}.md`;
-    
-    // Cache the result (limit cache size to prevent memory leaks)
-    if (filenameCache.size > 100) {
-      filenameCache.clear();
-    }
-    filenameCache.set(cacheKey, result);
-    
-    return result;
+    return `${baseName}.md`;
   } catch {
     // Fallback in case of error
     const nameWithoutExt = originalName.substring(0, originalName.lastIndexOf('.')) || originalName;
