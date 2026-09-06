@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>teamDNA v2 Founder OS - The Autonomous Agent Lab</title>
+  <style>
+    :root {
+      --bg-base: #050711;
+      --bg-elevated: #080b16;
+      --accent: #5a7bff;
+      --success: #4fd1a5;
+      --warning: #ffc857;
+      --danger: #ff5a7b;
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      --border: rgba(255, 255, 255, 0.1);
+      --font-stack: system-ui, -apple-system, sans-serif;
+    }
+    
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body {
+      background-color: var(--bg-base);
+      color: var(--text-main);
+      font-family: var(--font-stack);
+      line-height: 1.5;
+      padding: 2rem;
+    }
+
+    .container {
+      max-width: 1280px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
+    }
+
+    /* 1. Hero / Identity Command Header */
+    header {
+      position: relative;
+      padding: 3rem;
+      border-radius: 14px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    .wow-highlight {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: radial-gradient(circle at top right, rgba(90, 123, 255, 0.2), transparent 50%);
+      mix-blend-mode: screen;
+      pointer-events: none;
+    }
+
+    .wow-badge {
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+      background: linear-gradient(45deg, #ffc857, #ff5a7b);
+      -webkit-background-clip: text;
+      color: transparent;
+      font-weight: bold;
+      text-transform: uppercase;
+      font-size: 0.8rem;
+      letter-spacing: 0.05em;
+    }
+
+    h1 {
+      font-size: 2.5rem;
+      margin-bottom: 0.5rem;
+      position: relative;
+      z-index: 1;
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 1.1rem;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Core Section Styles */
+    section {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 2rem;
+    }
+
+    h2 {
+      font-size: 1.5rem;
+      margin-bottom: 1.5rem;
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    /* Grid Layouts */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+    .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }
+    
+    /* Cards */
+    .card {
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.5rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+    
+    .card:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+    
+    .card.wow-glow {
+      border-color: var(--warning);
+      box-shadow: 0 0 40px rgba(255, 200, 87, 0.1);
+    }
+
+    /* Chips & Tags */
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.25rem 0.75rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    
+    .lane-NOW { background: rgba(79, 209, 165, 0.1); color: var(--success); border: 1px solid rgba(79, 209, 165, 0.2); }
+    .lane-NEXT { background: rgba(255, 200, 87, 0.1); color: var(--warning); border: 1px solid rgba(255, 200, 87, 0.2); }
+    .lane-LATER { background: rgba(156, 163, 175, 0.1); color: var(--text-muted); border: 1px solid rgba(156, 163, 175, 0.2); }
+    .lane-ARCHIVE { background: rgba(255, 90, 123, 0.1); color: var(--danger); border: 1px solid rgba(255, 90, 123, 0.2); }
+
+    .uncertainty-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.15rem 0.5rem;
+      background: rgba(255, 200, 87, 0.1);
+      color: var(--warning);
+      border-radius: 4px;
+      font-size: 0.7rem;
+      margin-left: 0.5rem;
+      border: 1px solid rgba(255, 200, 87, 0.2);
+    }
+
+    .bullet-confirmed { color: var(--success); }
+    .bullet-uncertain { color: var(--warning); }
+
+    /* Interactive Elements */
+    .filter-bar {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 2rem;
+      flex-wrap: wrap;
+    }
+
+    button.filter-chip {
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 0.5rem 1rem;
+      border-radius: 999px;
+      transition: all 0.2s;
+    }
+    
+    button.filter-chip[aria-pressed="true"] {
+      background: var(--accent);
+      color: white;
+      border-color: var(--accent);
+    }
+
+    /* Form */
+    .form-group { margin-bottom: 1rem; }
+    input, select, textarea {
+      width: 100%;
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      color: var(--text-main);
+      padding: 0.75rem;
+      border-radius: 8px;
+      font-family: inherit;
+    }
+    
+    button.btn-primary {
+      background: var(--accent);
+      color: white;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      width: 100%;
+    }
+
+    button.btn-primary:hover {
+      opacity: 0.9;
+    }
+
+    /* Split View Panel */
+    .split-view {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 2rem;
+    }
+
+    .detail-panel {
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 2rem;
+      position: sticky;
+      top: 2rem;
+    }
+
+    .timeline-node {
+      display: flex;
+      gap: 1rem;
+      padding-bottom: 1.5rem;
+      border-left: 2px solid var(--border);
+      padding-left: 1.5rem;
+      position: relative;
+    }
+    
+    .timeline-node::before {
+      content: '';
+      position: absolute;
+      left: -6px;
+      top: 0;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      padding: 0.5rem 0;
+    }
+
+    #queue-list {
+      margin-top: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .queue-item {
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      padding: 1rem;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    
+    <!-- 1. Hero / Identity Command Header -->
+    <header>
+      <div class="wow-highlight"></div>
+      <div class="wow-badge">✦ Founder Command Center</div>
+      <h1>teamDNA v2 OS</h1>
+      <div class="subtitle">Builder: Vinny Gilberti | The Autonomous Agent Lab</div>
+    </header>
+
+    <!-- 2. Session Signals -->
+    <section>
+      <h2>Session Signals</h2>
+      <div class="grid-3">
+        <div class="card">
+          <div class="text-muted">Financial Urgency</div>
+          <div style="font-size: 1.5rem; font-weight: bold; color: var(--danger)">CRITICAL</div>
+        </div>
+        <div class="card">
+          <div class="text-muted">Primary Focus</div>
+          <div style="font-size: 1.5rem; font-weight: bold; color: var(--success)">Immediate Cash Conversion</div>
+        </div>
+        <div class="card">
+          <div class="text-muted">Active Projects</div>
+          <div style="font-size: 1.5rem; font-weight: bold;" id="active-count">-</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. Gap Analysis -->
+    <section>
+      <h2>Gap Analysis</h2>
+      <div class="card">
+        <div class="stat-row">
+          <span>Target State</span>
+          <span>Unified, revenue-generating future</span>
+        </div>
+        <div class="stat-row">
+          <span>Current State</span>
+          <span>Fragmented systems <span class="uncertainty-chip">⚠ Estimated</span></span>
+        </div>
+        <div class="stat-row">
+          <span>Core Strategy</span>
+          <span style="color: var(--success)">Cash first, compound infra second</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. Priority War Room -->
+    <section>
+      <h2>Priority War Room</h2>
+      <div class="filter-bar">
+        <button class="filter-chip" aria-pressed="true" data-filter="NOW" onclick="setLaneFilter('NOW')">Focus: Fastest Path to Cash (NOW)</button>
+        <button class="filter-chip" aria-pressed="false" data-filter="NEXT" onclick="setLaneFilter('NEXT')">Focus: Infra that Compounds (NEXT/LATER)</button>
+        <button class="filter-chip" aria-pressed="false" data-filter="ALL" onclick="setLaneFilter('ALL')">View All</button>
+      </div>
+      <div class="grid-3" id="war-room-grid"></div>
+    </section>
+
+    <div class="split-view">
+      <div style="display: flex; flex-direction: column; gap: 2rem;">
+        
+        <!-- 5. Full Project Encyclopedia -->
+        <section>
+          <h2>Full Project Encyclopedia</h2>
+          <div id="encyclopedia-list" style="display: flex; flex-direction: column; gap: 1rem;"></div>
+        </section>
+
+        <!-- 6. Revenue Architecture Map -->
+        <section>
+          <h2>Revenue Architecture Map</h2>
+          <div class="grid-2" id="revenue-map"></div>
+        </section>
+
+        <!-- 7. Project Atlas -->
+        <section>
+          <h2>Project Atlas</h2>
+          <div class="grid-2" id="atlas-grid"></div>
+        </section>
+
+        <!-- 8. Execution Timeline -->
+        <section>
+          <h2>Execution Timeline</h2>
+          <div id="timeline"></div>
+        </section>
+
+        <!-- 9. BBOY Spawn Queue -->
+        <section>
+          <h2>BBOY Spawn Queue</h2>
+          <form id="bboy-form" onsubmit="handleBboySpawn(event)">
+            <div class="form-group">
+              <input type="text" id="bboy-task" placeholder="Enter task name..." required>
+            </div>
+            <div class="form-group">
+              <select id="bboy-project" required>
+                <option value="">Select Project Target...</option>
+              </select>
+            </div>
+            <button type="submit" class="btn-primary">Spawn Task Node</button>
+          </form>
+          <div id="queue-list"></div>
+        </section>
+
+      </div>
+
+      <!-- 10. Operator Briefing Panel -->
+      <div>
+        <section class="detail-panel" id="briefing-panel">
+          <h2 style="margin-bottom: 0;">Operator Briefing Panel</h2>
+          <p class="text-muted" style="margin-bottom: 2rem; font-size: 0.9rem;">Select a project to view detailed intelligence.</p>
+          <div id="briefing-content">
+            <div style="text-align: center; color: var(--text-muted); padding: 3rem 0;">
+              No target selected.
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const projects = [
+      {
+        name: "The Autonomous Agent Lab",
+        category: "brand",
+        status: "Active",
+        revenue_score: 3,
+        completion_score: 3,
+        priority_lane: "NEXT",
+        why_it_matters: "Umbrella entity container for all agency and product efforts.",
+        current_blocker: "Formalizing brand assets",
+        next_action: "Finalize brand guidelines",
+        dependencies: [],
+        proof_artifacts: [],
+        uncertainty_flags: ["status", "current_blocker", "next_action", "dependencies", "proof_artifacts"]
+      },
+      {
+        name: "RevenueOS v1.0",
+        category: "dashboard",
+        status: "In Development",
+        revenue_score: 5,
+        completion_score: 2,
+        priority_lane: "NOW",
+        why_it_matters: "Immediate cash conversion wedge",
+        current_blocker: "Data integration",
+        next_action: "Finalize core API connections",
+        dependencies: [],
+        proof_artifacts: [],
+        uncertainty_flags: ["status", "current_blocker", "next_action", "dependencies", "proof_artifacts"]
+      },
+      {
+        name: "Lead Rescue",
+        category: "offer",
+        status: "In Development",
+        revenue_score: 5,
+        completion_score: 2,
+        priority_lane: "NOW",
+        why_it_matters: "Core monetization path for immediate cash",
+        current_blocker: "Sales collateral",
+        next_action: "Draft one-pager",
+        dependencies: [],
+        proof_artifacts: [],
+        uncertainty_flags: ["status", "current_blocker", "next_action", "dependencies", "proof_artifacts"]
+      },
+      {
+        name: "Digital Assistants Service Layer",
+        category: "service",
+        status: "Active",
+        revenue_score: 5,
+        completion_score: 3,
+        priority_lane: "NOW",
+        why_it_matters: "High margin service delivery",
+        current_blocker: "Scaling team",
+        next_action: "Hire prompt engineer",
+        dependencies: [],
+        proof_artifacts: [],
+        uncertainty_flags: ["status", "current_blocker", "next_action", "dependencies", "proof_artifacts"]
+      },
+      {
+        name: "Unified Free-Tier Ops Dashboard",
+        category: "dashboard",
+        status: "Planned",
+        revenue_score: 3,
+        completion_score: 2,
+        priority_lane: "NEXT",
+        why_it_matters: "Infrastructure that compounds delivery speed",
+        current_blocker: "Design system",
+        next_action: "Create wireframes",
+        dependencies: [],
+        proof_artifacts: [],
+        uncertainty_flags: ["status", "current_blocker", "next_action", "dependencies", "proof_artifacts"]
+      },
+      {
+        name: "LangGraph Agent Framework",
+        category: "framework",
+        status: "Planned",
+        revenue_score: 3,
+        completion_score: 2,
+        priority_lane: "NEXT",
+        why_it_matters: "Standardized agent building",
+        current_blocker: "Architecture review",
+        next_action: "Define core interfaces",
+        dependencies: [],
+        proof_artifacts: [],
+        uncertainty_flags: ["status", "current_blocker", "next_action", "dependencies", "proof_artifacts"]
+      },
+      {
+        name: "Agent Observability Stack",
+        category: "observability",
+        status: "Concept",
+        revenue_score: 3,
+        completion_score: 1,
+        priority_lane: "NEXT",
+        why_it_matters: "Ensuring agent reliability",
+        current_blocker: "Tool selection",
+        next_action: "Evaluate Datadog vs custom",
+        dependencies: [],
+        proof_artifacts: [],
+        uncertainty_flags: ["status", "current_blocker", "next_action", "dependencies", "proof_artifacts"]
+      },
+      {
+        name: "teamDNA Dashboard",
+        category: "dashboard",
+        status: "Active",
+        revenue_score: 4,
+        completion_score: 4,
+        priority_lane: "NEXT",
+        why_it_matters: "Internal operations center",
+        current_blocker: "Final polish",
+        next_action: "Deploy v2",
+        dependencies: [],
+        proof_artifacts: [],
+        uncertainty_flags: ["status", "current_blocker", "next_action", "dependencies", "proof_artifacts"]
+      }
+    ];
+
+    const revenueMeta = {
+      "The Autonomous Agent Lab": { core: false, monetizationPath: "Brand equity", valueBand: "High", clients: "Internal" },
+      "RevenueOS v1.0": { core: true, monetizationPath: "SaaS / License", valueBand: "$500-1000/mo", clients: "B2B" },
+      "Lead Rescue": { core: true, monetizationPath: "Done-for-you service", valueBand: "$2000-5000", clients: "B2B" },
+      "Digital Assistants Service Layer": { core: true, monetizationPath: "Retainer", valueBand: "$3000+/mo", clients: "B2B" },
+      "Unified Free-Tier Ops Dashboard": { core: false, monetizationPath: "Lead gen", valueBand: "Free", clients: "B2B" },
+      "LangGraph Agent Framework": { core: false, monetizationPath: "Internal efficiency", valueBand: "N/A", clients: "Internal" },
+      "Agent Observability Stack": { core: false, monetizationPath: "Service quality", valueBand: "N/A", clients: "Internal" },
+      "teamDNA Dashboard": { core: false, monetizationPath: "Internal efficiency", valueBand: "N/A", clients: "Internal" }
+    };
+
+    let currentFilter = 'NOW';
+
+    function getUncertaintyHTML(proj, field) {
+      if (proj.uncertainty_flags.includes(field)) {
+        return `<span class="uncertainty-chip" title="Unsurfaced / Estimated">⚠ Estimated</span>`;
+      }
+      return '';
+    }
+
+    function renderProjectCard(proj) {
+      const isNow = proj.priority_lane === 'NOW';
+      const glowClass = isNow ? 'wow-glow' : '';
+      return `
+        <div class="card ${glowClass}" onclick="selectProject('${proj.name}')" tabindex="0" onkeypress="if(event.key==='Enter') selectProject('${proj.name}')">
+          <div style="display:flex; justify-content:space-between; margin-bottom:1rem;">
+            <span class="chip lane-${proj.priority_lane}">${proj.priority_lane}</span>
+            <span style="color:var(--text-muted); font-size:0.8rem;">Rev: ${proj.revenue_score}/5</span>
+          </div>
+          <h3 style="margin-bottom:0.5rem; font-size:1.1rem;">${proj.name}</h3>
+          <p style="color:var(--text-muted); font-size:0.9rem; margin-bottom:1rem; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">${proj.why_it_matters}</p>
+          <div class="stat-row" style="font-size:0.8rem;">
+            <span>Next:</span>
+            <span class="${proj.uncertainty_flags.includes('next_action') ? 'bullet-uncertain' : 'bullet-confirmed'}">${proj.next_action} ${getUncertaintyHTML(proj, 'next_action')}</span>
+          </div>
+        </div>
+      `;
+    }
+
+    function setLaneFilter(lane) {
+      currentFilter = lane;
+      document.querySelectorAll('.filter-chip').forEach(btn => {
+        btn.setAttribute('aria-pressed', btn.dataset.filter === lane ? 'true' : 'false');
+      });
+      renderWarRoom();
+    }
+
+    function renderWarRoom() {
+      const grid = document.getElementById('war-room-grid');
+      let filtered = projects;
+      if (currentFilter === 'NOW') {
+        filtered = projects.filter(p => p.priority_lane === 'NOW');
+      } else if (currentFilter === 'NEXT') {
+        filtered = projects.filter(p => p.priority_lane === 'NEXT' || p.priority_lane === 'LATER');
+      }
+      
+      grid.innerHTML = filtered.map(p => renderProjectCard(p)).join('');
+    }
+
+    function selectProject(name) {
+      const proj = projects.find(p => p.name === name);
+      const meta = revenueMeta[name];
+      if (!proj) return;
+
+      const panel = document.getElementById('briefing-content');
+      panel.innerHTML = `
+        <div style="margin-bottom:1.5rem;">
+          <span class="chip lane-${proj.priority_lane}" style="margin-bottom:1rem;">${proj.priority_lane} LANE</span>
+          <h3 style="font-size:1.5rem; color:var(--text-main); margin-bottom:0.5rem;">${proj.name}</h3>
+          <p style="color:var(--text-muted);">${proj.why_it_matters}</p>
+        </div>
+
+        <div style="margin-bottom:1.5rem;">
+          <h4 style="color:var(--accent); margin-bottom:0.5rem; font-size:0.9rem; text-transform:uppercase;">Revenue Architecture</h4>
+          <div class="stat-row"><span>Type:</span><span>${meta.core ? 'Core Offer' : 'Supporting Infra'}</span></div>
+          <div class="stat-row"><span>Monetization:</span><span>${meta.monetizationPath}</span></div>
+          <div class="stat-row"><span>Value Band:</span><span>${meta.valueBand}</span></div>
+        </div>
+
+        <div style="margin-bottom:1.5rem;">
+          <h4 style="color:var(--accent); margin-bottom:0.5rem; font-size:0.9rem; text-transform:uppercase;">Execution State</h4>
+          <div class="stat-row"><span>Status:</span><span class="${proj.uncertainty_flags.includes('status') ? 'bullet-uncertain' : 'bullet-confirmed'}">${proj.status} ${getUncertaintyHTML(proj, 'status')}</span></div>
+          <div class="stat-row"><span>Blocker:</span><span class="${proj.uncertainty_flags.includes('current_blocker') ? 'bullet-uncertain' : 'bullet-confirmed'}">${proj.current_blocker} ${getUncertaintyHTML(proj, 'current_blocker')}</span></div>
+          <div class="stat-row"><span>Next Action:</span><span class="${proj.uncertainty_flags.includes('next_action') ? 'bullet-uncertain' : 'bullet-confirmed'}">${proj.next_action} ${getUncertaintyHTML(proj, 'next_action')}</span></div>
+        </div>
+      `;
+    }
+
+    function renderEncyclopedia() {
+      const list = document.getElementById('encyclopedia-list');
+      list.innerHTML = projects.map(proj => `
+        <div class="card" onclick="selectProject('${proj.name}')" tabindex="0">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="display:flex; gap:1rem; align-items:center;">
+              <span class="chip lane-${proj.priority_lane}">${proj.priority_lane}</span>
+              <span style="font-weight:600;">${proj.name}</span>
+            </div>
+            <span style="color:var(--text-muted); font-size:0.9rem;">Rev: ${proj.revenue_score}/5 | Done: ${proj.completion_score}/5</span>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderRevenueMap() {
+      const map = document.getElementById('revenue-map');
+      
+      const core = projects.filter(p => revenueMeta[p.name].core);
+      const infra = projects.filter(p => !revenueMeta[p.name].core);
+
+      const renderList = (title, items, color) => `
+        <div class="card" style="border-top: 3px solid ${color}">
+          <h3 style="margin-bottom:1rem; font-size:1.1rem; color:${color}">${title}</h3>
+          <div style="display:flex; flex-direction:column; gap:0.5rem;">
+            ${items.map(p => `
+              <div style="padding:0.5rem; background:rgba(255,255,255,0.05); border-radius:6px; cursor:pointer;" onclick="selectProject('${p.name}')">
+                <div style="font-weight:bold; font-size:0.9rem;">${p.name}</div>
+                <div style="font-size:0.8rem; color:var(--text-muted);">${revenueMeta[p.name].monetizationPath}</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+
+      map.innerHTML = 
+        renderList("Core Offer Layer (Direct Cash)", core, "var(--success)") +
+        renderList("Supporting Infrastructure", infra, "var(--accent)");
+    }
+
+    function renderAtlas() {
+      const grid = document.getElementById('atlas-grid');
+      // Group by category
+      const categories = [...new Set(projects.map(p => p.category))];
+      
+      grid.innerHTML = categories.map(cat => `
+        <div class="card">
+          <h3 style="text-transform:uppercase; font-size:0.8rem; letter-spacing:0.1em; color:var(--text-muted); margin-bottom:1rem;">${cat}</h3>
+          <div style="display:flex; flex-direction:column; gap:0.5rem;">
+            ${projects.filter(p => p.category === cat).map(p => `
+              <div style="font-size:0.9rem; cursor:pointer;" onclick="selectProject('${p.name}')">
+                • <span style="text-decoration:underline; text-decoration-color:var(--border);">${p.name}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderTimeline() {
+      const tl = document.getElementById('timeline');
+      // Sort: NOW first, then NEXT, then LATER
+      const sorted = [...projects].sort((a,b) => {
+        const order = { 'NOW': 1, 'NEXT': 2, 'LATER': 3, 'ARCHIVE': 4 };
+        return order[a.priority_lane] - order[b.priority_lane];
+      });
+
+      tl.innerHTML = sorted.map(p => `
+        <div class="timeline-node">
+          <div>
+            <div style="font-weight:bold; margin-bottom:0.25rem;">${p.name} <span class="chip lane-${p.priority_lane}" style="transform:scale(0.8);">${p.priority_lane}</span></div>
+            <div style="font-size:0.9rem; color:var(--text-muted);">Next: ${p.next_action} ${getUncertaintyHTML(p, 'next_action')}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function populateSelect() {
+      const sel = document.getElementById('bboy-project');
+      sel.innerHTML = '<option value="">Select Project Target...</option>' + 
+        projects.map(p => `<option value="${p.name}">${p.name}</option>`).join('');
+    }
+
+    function handleBboySpawn(e) {
+      e.preventDefault();
+      const task = document.getElementById('bboy-task').value;
+      const proj = document.getElementById('bboy-project').value;
+      
+      if (!task || !proj) return;
+
+      const queue = document.getElementById('queue-list');
+      const item = document.createElement('div');
+      item.className = 'queue-item';
+      item.innerHTML = `
+        <div style="font-weight:bold; font-size:0.9rem; margin-bottom:0.25rem;">${task}</div>
+        <div style="font-size:0.8rem; color:var(--text-muted);">Target: ${proj}</div>
+      `;
+      queue.prepend(item);
+      
+      document.getElementById('bboy-form').reset();
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      document.getElementById('active-count').innerText = projects.length;
+      renderWarRoom();
+      renderEncyclopedia();
+      renderRevenueMap();
+      renderAtlas();
+      renderTimeline();
+      populateSelect();
+    });
+  </script>
+</body>
+</html>

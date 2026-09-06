@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect } from 'react';
-import { FileDiff, Download, Copy, Check, Menu, X, Network } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { FileDiff, Download, Copy, Check, Menu, X, Network, CloudUpload } from 'lucide-react';
 import DropZone from './components/DropZone';
 import FileItem from './components/FileItem';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
@@ -14,6 +14,8 @@ import { Preloader } from './components/Preloader';
 import { HeroSequence } from './components/HeroSequence';
 import { IngestionEngine } from './components/IngestionEngine';
 import { useFileStore } from './src/stores/useFileStore';
+import { GoogleDriveIntegration } from './components/GoogleDriveIntegration';
+import { initAuth, getAccessToken, uploadFileToDrive } from './services/googleDrive';
 
 const App: React.FC = () => {
   const {
@@ -46,10 +48,67 @@ const App: React.FC = () => {
   const dragDropOpacity = useTransform(scrollYProgress, [0.4, 0.6], [0, 1]);
   const dragDropY = useTransform(scrollYProgress, [0.4, 0.6], [100, 0]);
 
+  const [driveAuthed, setDriveAuthed] = useState(false);
+  const [exportingToDrive, setExportingToDrive] = useState(false);
+  const [driveExportSuccess, setDriveExportSuccess] = useState<string | null>(null);
+
   useEffect(() => {
     bootstrapFormatRouter();
     conversionGraph.initAllSupported();
+
+    const unsubscribe = initAuth(
+      () => setDriveAuthed(true),
+      () => setDriveAuthed(false)
+    );
+    return () => unsubscribe();
   }, []);
+
+  const handleSaveMergedToDrive = async () => {
+    const token = getAccessToken();
+    if (!token) {
+      alert('Please connect to Google Drive first using the panel below.');
+      return;
+    }
+    const mergedContent = generateMergedContent();
+    if (!mergedContent) return;
+
+    setExportingToDrive(true);
+    setDriveExportSuccess(null);
+    try {
+      const fileName = `merged_output_${Date.now()}.md`;
+      await uploadFileToDrive(token, fileName, mergedContent, 'text/markdown');
+      setDriveExportSuccess('Merged Markdown saved to Google Drive!');
+      setTimeout(() => setDriveExportSuccess(null), 4000);
+    } catch (err: any) {
+      console.error(err);
+      alert('Failed to save to Google Drive: ' + (err.message || String(err)));
+    } finally {
+      setExportingToDrive(false);
+    }
+  };
+
+  const handleSaveGraphToDrive = async () => {
+    const token = getAccessToken();
+    if (!token) {
+      alert('Please connect to Google Drive first using the panel below.');
+      return;
+    }
+    const { irGraph } = useFileStore.getState();
+
+    setExportingToDrive(true);
+    setDriveExportSuccess(null);
+    try {
+      const fileName = `ir-knowledge-graph_${Date.now()}.json`;
+      await uploadFileToDrive(token, fileName, JSON.stringify(irGraph, null, 2), 'application/json');
+      setDriveExportSuccess('IR Knowledge Graph saved to Google Drive!');
+      setTimeout(() => setDriveExportSuccess(null), 4000);
+    } catch (err: any) {
+      console.error(err);
+      alert('Failed to save to Google Drive: ' + (err.message || String(err)));
+    } finally {
+      setExportingToDrive(false);
+    }
+  };
 
   const handleProcessFile = useCallback(async (id: string, action: string, customInstruction?: string) => {
     const fileEntry = files.find(f => f.id === id);
@@ -288,8 +347,11 @@ const App: React.FC = () => {
           >
             {/* Drag & Drop Area - Available if no active ingestion is blocking */}
             {files.every(f => f.status !== ConversionStatus.ANALYZING_INGESTION) && (
-              <div className="mb-16 shadow-2xl shadow-zinc-200/50">
-                <DropZone onFilesDropped={addFiles} acceptAllFiles={true} />
+              <div className="mb-16 space-y-8">
+                <div className="shadow-2xl shadow-zinc-200/50">
+                  <DropZone onFilesDropped={addFiles} acceptAllFiles={true} />
+                </div>
+                <GoogleDriveIntegration onFilesImported={addFiles} />
               </div>
             )}
 
@@ -361,13 +423,33 @@ const App: React.FC = () => {
                   {copiedAll ? <Check className="w-4 h-4" strokeWidth={2} /> : <Copy className="w-4 h-4" strokeWidth={2} />}
                   <span>{copiedAll ? 'COPIED' : 'COPY ALL'}</span>
                 </button>
-                <div className="flex space-x-4">
+                <div className="flex flex-wrap items-center justify-end gap-3 md:gap-4">
                   <button 
                     onClick={handleClearAll}
                     className="text-sm text-zinc-500 hover:text-red-600 transition-colors font-bold uppercase tracking-wider px-3"
                   >
                     Clear All
                   </button>
+                  {driveAuthed && (
+                    <>
+                      <button 
+                        onClick={handleSaveGraphToDrive}
+                        disabled={exportingToDrive}
+                        className="flex items-center space-x-1.5 text-sm bg-blue-50 border-2 border-zinc-900 text-blue-900 px-4 py-2 hover:bg-zinc-900 hover:text-white transition-colors font-bold shadow-[4px_4px_0px_0px_rgba(24,24,27,1)] active:translate-y-1 active:shadow-none uppercase disabled:opacity-50"
+                      >
+                        <CloudUpload className="w-4 h-4" strokeWidth={2} />
+                        <span>{exportingToDrive ? 'SAVING...' : 'SAVE GRAPH TO DRIVE'}</span>
+                      </button>
+                      <button 
+                        onClick={handleSaveMergedToDrive}
+                        disabled={exportingToDrive}
+                        className="flex items-center space-x-1.5 text-sm bg-green-50 border-2 border-zinc-900 text-green-900 px-4 py-2 hover:bg-zinc-900 hover:text-white transition-colors font-bold shadow-[4px_4px_0px_0px_rgba(24,24,27,1)] active:translate-y-1 active:shadow-none uppercase disabled:opacity-50"
+                      >
+                        <CloudUpload className="w-4 h-4" strokeWidth={2} />
+                        <span>{exportingToDrive ? 'SAVING...' : 'SAVE MERGED TO DRIVE'}</span>
+                      </button>
+                    </>
+                  )}
                   <button 
                     onClick={handleExportGraph}
                     className="flex items-center space-x-1.5 text-sm bg-white border-2 border-zinc-900 text-zinc-900 px-5 py-2 hover:bg-zinc-900 hover:text-white transition-colors font-bold shadow-[4px_4px_0px_0px_rgba(24,24,27,1)] active:translate-y-1 active:shadow-none uppercase"
@@ -383,6 +465,12 @@ const App: React.FC = () => {
                     <span>Download Merged</span>
                   </button>
                 </div>
+              </div>
+            )}
+            
+            {driveExportSuccess && (
+              <div className="mt-4 p-3 bg-green-50 border-2 border-green-600 text-green-800 font-mono text-xs text-right shadow-[4px_4px_0px_0px_rgba(22,101,52,0.2)]">
+                {driveExportSuccess}
               </div>
             )}
           </motion.div>

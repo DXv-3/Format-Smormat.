@@ -22,7 +22,7 @@ function getAllowedOrigins(env: Env): string[] {
 }
 
 function corsHeaders(origin: string | null, allowed: string[]): Record<string, string> {
-  const allow = origin && allowed.includes(origin) ? origin : allowed[0];
+  const allow = allowed.includes('*') ? '*' : (origin && allowed.includes(origin) ? origin : allowed[0]);
   return {
     'Access-Control-Allow-Origin': allow,
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -187,7 +187,7 @@ export default {
     }
 
     // CORS block
-    if (origin && !allowedOrigins.includes(origin)) {
+    if (origin && !allowedOrigins.includes('*') && !allowedOrigins.includes(origin)) {
       return new Response('Forbidden', { status: 403 });
     }
 
@@ -218,7 +218,7 @@ export default {
 
       const mode = reqBody.mode;
       const usePro = mode === 'transform' || mode === 'lens_render';
-      const geminiUrl = `${GEMINI_REST}/models/${usePro ? 'gemini-3.1-pro-preview' : 'gemini-3.1-flash-lite-preview'}:generateContent?key=${env.GEMINI_API_KEY}`;
+      const geminiUrl = `${GEMINI_REST}/models/gemini-3.5-flash:generateContent?key=${env.GEMINI_API_KEY.trim()}`;
 
       let geminiBody: any;
       if (mode === 'transform') {
@@ -242,7 +242,7 @@ export default {
       if (!geminiResponse.ok) {
         const errText = await geminiResponse.text();
         console.error(`Upstream Gemini error: ${geminiResponse.status}`, errText);
-        return new Response('Error contacting AI service.', {
+        return new Response(`Error contacting AI service: ${errText}`, {
           status: 502,
           headers: corsHeaders(origin, allowedOrigins)
         });
